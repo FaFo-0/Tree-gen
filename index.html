@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>INPUT / OUTPUT — branch · root · rhizome generator</title>
+<style>
+ :root{--bg:#0c0c0d;--panel:#161618;--panel2:#1e1e21;--line:#2a2a2e;--txt:#dcdce0;--dim:#8a8a92;--accent:#2a6cf0;}
+ *{box-sizing:border-box}
+ body{margin:0;height:100vh;display:flex;background:var(--bg);color:var(--txt);font:13px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+ /* panel */
+ #panel{width:346px;flex:none;height:100vh;overflow-y:auto;background:var(--panel);border-right:1px solid var(--line);padding:14px 14px 40px}
+ #panel::-webkit-scrollbar{width:9px}#panel::-webkit-scrollbar-thumb{background:#33333a;border-radius:5px}
+ h1{font-size:13px;letter-spacing:2px;margin:0 0 2px;color:#fff;font-weight:700}
+ .sub{color:var(--dim);font-size:11px;margin-bottom:12px}
+ .seedrow{display:flex;align-items:center;gap:8px;margin:10px 0}
+ .seedrow .lbl{color:var(--dim)}
+ .seedrow b{color:#6cf;min-width:56px}
+ .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+ .chip{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:20px;padding:5px 11px;font-size:12px;cursor:pointer}
+ .chip:hover{border-color:var(--accent);color:#fff}
+ .btns{display:flex;gap:7px;margin:8px 0}
+ button{flex:1;padding:8px 6px;border:0;border-radius:7px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:12px}
+ button.alt{background:var(--panel2);border:1px solid var(--line)}
+ button:hover{filter:brightness(1.12)} button:active{transform:translateY(1px)}
+ select,input[type=number]{background:var(--panel2);color:#fff;border:1px solid var(--line);border-radius:6px;padding:6px;font-size:12px}
+ /* sections */
+ .sec{border-top:1px solid var(--line);margin-top:8px}
+ .sec-h{cursor:pointer;padding:9px 2px 6px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--dim);user-select:none}
+ .sec-h:before{content:"▾ ";color:#555}
+ .sec.collapsed .sec-b{display:none}
+ .sec.collapsed .sec-h:before{content:"▸ "}
+ .row{margin:7px 0}
+ .row label{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;font-size:12px}
+ .row label span{display:inline-flex;align-items:center}
+ .row input[type=range]{width:100%}
+ .lk{cursor:pointer;margin-right:6px;user-select:none;font-size:12px;opacity:.5;filter:grayscale(1)}
+ .lk.on{opacity:1;filter:none}
+ .grp{margin:12px 0 4px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--dim)}
+ .chk{display:flex;align-items:center;gap:8px;margin:7px 0;color:#bbb;font-size:12px}
+ .field{display:flex;flex-direction:column;gap:3px;color:var(--dim);font-size:11px;flex:1}
+ .field input,.field select{width:100%}
+ small{color:#666;display:block;margin-top:6px;font-size:11px}
+ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+ /* stage */
+ #stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;padding:20px;gap:10px;min-width:0}
+ .wrap{position:relative;width:min(100%,calc((100vh - 90px) * 1.5556));aspect-ratio:140/90;box-shadow:0 10px 60px #000;background:
+   conic-gradient(#c9c9c9 90deg,#fff 0 180deg,#c9c9c9 0 270deg,#fff 0) 0 0/28px 28px}
+ #c,#ov{position:absolute;inset:0;width:100%;height:100%}
+ #ov{cursor:crosshair}
+ #status{color:var(--dim);font-size:12px;min-height:16px}
+ .hint{position:absolute;top:8px;left:12px;color:var(--dim);font-size:11px;background:rgba(0,0,0,.35);padding:3px 8px;border-radius:5px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id=panel>
+  <h1>INPUT / OUTPUT</h1>
+  <div class=sub>branch · root · rhizome generator — 100% algorithmic</div>
+
+  <div class=seedrow>
+    <span class=lbl>Seed</span><b id=seedval>8</b>
+    <button class=alt style="flex:0 0 auto;padding:6px 10px" onclick="rndSeed()">🎲 seed</button>
+  </div>
+
+  <div class=grp>Styles</div>
+  <div class=chips id=styles></div>
+
+  <div class=btns>
+    <button onclick="randomizeParams()">🎲 Randomize params</button>
+  </div>
+  <div class=btns>
+    <button class=alt onclick="resetCenter()">✛ Center</button>
+    <button class=alt onclick="resetLimbs()">↺ Limbs</button>
+  </div>
+
+  <div class=chk><input type=checkbox id=tree_mode><label for=tree_mode>Tree forks (off = Bushy / denser)</label></div>
+  <div class=chk><input type=checkbox id=round_joints checked><label for=round_joints>Round joints (smooth)</label></div>
+  <div class=chk><input type=checkbox id=mirror><label for=mirror>Mirror (with symmetry)</label></div>
+  <div class=chk><input type=checkbox id=soft_tips><label for=soft_tips>Soft gray tips</label></div>
+  <div class=chk><input type=checkbox id=white_bg checked><label for=white_bg>White background (off = transparent)</label></div>
+
+  <div id=sliders></div>
+
+  <hr>
+  <div class=grp>Presets</div>
+  <div class=btns>
+    <button class=alt onclick="savePresetFile()">💾 File</button>
+    <button class=alt onclick="document.getElementById('pf').click()">📂 Load</button>
+    <input type=file id=pf accept=".json" style=display:none onchange="loadPresetFile(this.files[0]);this.value=''">
+  </div>
+  <div class=btns>
+    <button class=alt onclick="saveSlot()">＋ Save slot</button>
+    <button class=alt onclick="delSlot()">🗑 Delete</button>
+  </div>
+  <select id=slots style="width:100%;margin-top:6px" onchange="loadSlot()"></select>
+
+  <hr>
+  <div class=grp>Export still (PNG)</div>
+  <div class=field style="margin:6px 0">Width px (height auto 140:90)
+    <input type=number id=stillw value=8400 min=400 max=12000 step=2></div>
+  <div class=btns>
+    <button class=alt onclick="exportPNG('white')">⬇ White</button>
+    <button class=alt onclick="exportPNG('transparent')">⬇ Transparent</button>
+  </div>
+
+  <hr>
+  <div class=grp>Video (seed sweep / growth)</div>
+  <div class=btns style="gap:7px">
+    <div class=field>Mode<select id=vmode><option value=seed>seed sweep</option><option value=growth>growth</option></select></div>
+    <div class=field>Frames<input type=number id=vframes value=60 min=2 max=600></div>
+  </div>
+  <div class=btns style="gap:7px">
+    <div class=field>FPS<input type=number id=vfps value=12 min=1 max=60></div>
+    <div class=field>Width<input type=number id=vw value=1000 min=200 max=4000 step=2></div>
+  </div>
+  <div class=chk><input type=checkbox id=vrand><label for=vrand>Randomize params each frame (respects 🔒)</label></div>
+  <div class=btns>
+    <button onclick="previewVideo()">▶ Preview</button>
+    <button class=alt onclick="stopPreview()">■ Stop</button>
+  </div>
+  <div class=btns><button class=alt onclick="exportVideo()">🎬 Export .webm</button></div>
+  <small>Video is WebM (plays in browsers / imports to editors). PNG still is separate & huge-res. Everything runs in your browser — nothing uploaded.</small>
+</div>
+
+<div id=stage>
+  <div class=wrap>
+    <canvas id=c></canvas>
+    <canvas id=ov></canvas>
+    <div class=hint>click = move center · drag a dot = aim a limb</div>
+  </div>
+  <div id=status>…</div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
