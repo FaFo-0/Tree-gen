@@ -77,7 +77,8 @@
   <div class=chips id=styles></div>
 
   <div class=btns>
-    <button onclick="randomizeParams()">🎲 Randomize params</button>
+    <button onclick="randomizeParams()" title="R">🎲 Randomize</button>
+    <button class=alt onclick="mutateParams()" title="M — nudge unlocked params">🧬 Mutate</button>
   </div>
   <div class=btns>
     <button class=alt onclick="undo()" title="Ctrl+Z">↶ Undo</button>
@@ -95,7 +96,18 @@
   <div class=chk><input type=checkbox id=mirror><label for=mirror>Mirror (with symmetry)</label></div>
   <div class=chk><input type=checkbox id=soft_tips><label for=soft_tips>Soft gray tips</label></div>
   <div class=chk><input type=checkbox id=breeze><label for=breeze>🍃 Breeze (animate wind live)</label></div>
+  <div class=chk><input type=checkbox id=buds><label for=buds>🌸 Buds at tips</label></div>
   <div class=chk><input type=checkbox id=white_bg checked><label for=white_bg>White background (off = transparent)</label></div>
+  <div class=field style="margin:8px 0">Aspect ratio
+    <select id=aspect>
+      <option value="140,90">140 : 90 (mural)</option>
+      <option value="1,1">1 : 1 square</option>
+      <option value="4,5">4 : 5 portrait</option>
+      <option value="3,4">3 : 4 portrait</option>
+      <option value="16,9">16 : 9 wide</option>
+      <option value="9,16">9 : 16 tall</option>
+    </select>
+  </div>
 
   <div id=sliders></div>
 

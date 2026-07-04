@@ -4,7 +4,8 @@
    symmetry, growth animation, movable center, draggable main-limb handles. */
 
 'use strict';
-const ASPECT = 90 / 140;                       // locked 140:90
+let AR = [140,90];                             // aspect ratio (w,h)
+let ASPECT = AR[1]/AR[0];                       // height/width
 
 /* ---------- seeded PRNG (reproducible per seed) ---------- */
 let RNG = mulberry32(1);
@@ -75,7 +76,7 @@ const P = {};                                  // current param values
 SLIDERS.forEach(s=>P[s[0]]=s[5]);
 let state = {
   seed:8, center_x:0.5, center_y:0.5, extra:[],
-  fork_mode:"bushy", round_joints:true, soft_tips:false, mirror:false, white_bg:true,
+  fork_mode:"bushy", round_joints:true, soft_tips:false, mirror:false, white_bg:true, buds:false,
 };
 const locked = new Set();
 let limbAims = [];                              // per-main-limb aim override (radians) or undefined (primary center only)
@@ -137,7 +138,11 @@ function drawBranches(ctx, W, H, growthR){
           stack.push([x,y,sa2, wid*P.side_wid_ratio, seglen*P.side_len_ratio, depth+2, false]);
         }
       }
-      if(depth<P.max_depth && wid>minw){
+      if(!(depth<P.max_depth && wid>minw)){
+        if(state.buds && (growthR===Infinity || Math.hypot(x-cx,y-cy)<=growthR)){
+          ctx.fillStyle="#000"; ctx.beginPath(); ctx.arc(x,y,Math.max(1.3,2.4*sc),0,7); ctx.fill();
+        }
+      } else {
         const sp = P.fork_angle+uni(0,P.fork_angle_var);
         const base_len = seglen*P.fork_len_ratio, ew = wid;
         if(bushy){
@@ -189,7 +194,7 @@ function renderScene(ctx, W, H, opts){
 }
 
 /* ---------- display ---------- */
-const PW = 1500, PH = Math.round(PW*ASPECT);
+const PW = 1500; let PH = Math.round(PW*ASPECT);
 const cvs = document.getElementById("c");
 const ov  = document.getElementById("ov");
 cvs.width=PW; cvs.height=PH;
@@ -295,7 +300,20 @@ function randomizeParams(){
   }
   limbAims=[]; scheduleRender(); recordHistory();
 }
+function mutateParams(){                          // nudge unlocked params ±12% of range (explore nearby)
+  for(const [key,label,mn,mx,st] of SLIDERS){
+    if(locked.has(key)) continue;
+    let v = P[key] + (Math.random()*2-1)*(mx-mn)*0.12;
+    v = Math.max(mn,Math.min(mx,v));
+    v = mn + Math.round((v-mn)/st)*st;
+    P[key] = INT_KEYS.has(key)?Math.round(v):+v.toFixed(decimals(st));
+    showVal(key);
+  }
+  scheduleRender(); recordHistory();
+}
 function rndSeed(){ state.seed=Math.floor(Math.random()*1e6); document.getElementById("seedval").textContent=state.seed; scheduleRender(); recordHistory(); }
+function setAspect(w,h){ AR=[w,h]; ASPECT=h/w; PH=Math.round(PW*ASPECT); cvs.width=PW; cvs.height=PH; fitWrap(); scheduleRender(); }
+function fitWrap(){ const el=document.querySelector(".wrap"); el.style.aspectRatio=`${AR[0]}/${AR[1]}`; el.style.width=`min(100%, calc((100vh - 90px) * ${AR[0]/AR[1]}))`; }
 
 /* ---------- style presets ---------- */
 const STYLES = {
@@ -313,7 +331,7 @@ function applyStyle(name){
 }
 
 /* ---------- presets (localStorage + file) ---------- */
-function snapshot(){ return {params:{...P}, state:{...state}, locked:[...locked], center:{x:state.center_x,y:state.center_y}}; }
+function snapshot(){ return {params:{...P}, state:{...state}, locked:[...locked], center:{x:state.center_x,y:state.center_y}, ar:[...AR]}; }
 function applySnapshot(o){
   if(o.params) for(const k in o.params){ if(k in P){P[k]=o.params[k];} }
   if(o.state) Object.assign(state,o.state);
@@ -326,6 +344,8 @@ function applySnapshot(o){
   document.getElementById("soft_tips").checked=state.soft_tips;
   document.getElementById("mirror").checked=state.mirror;
   document.getElementById("white_bg").checked=state.white_bg;
+  document.getElementById("buds").checked=!!state.buds;
+  if(o.ar){ document.getElementById("aspect").value=o.ar.join(","); setAspect(o.ar[0],o.ar[1]); }
   limbAims=[]; scheduleRender(); recordHistory();
 }
 function savePresetFile(){
@@ -477,6 +497,7 @@ function onKey(e){
   if(e.ctrlKey||e.metaKey){ if(e.key.toLowerCase()==="z"){ e.preventDefault(); e.shiftKey?redo():undo(); } else if(e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); } return; }
   const k=e.key.toLowerCase();
   if(k==="r") randomizeParams();
+  else if(k==="m") mutateParams();
   else if(k==="s") rndSeed();
   else if(k==="c") resetCenter();
   else if(k==="g") toggleGallery();
@@ -494,6 +515,9 @@ function init(){
   const tm=document.getElementById("tree_mode"); tm.checked=false;
   tm.addEventListener("change",()=>{ state.fork_mode=tm.checked?"tree":"bushy"; scheduleRender(); recordHistory(); });
   document.getElementById("breeze").addEventListener("change",e=>toggleBreeze(e.target.checked));
+  document.getElementById("buds").addEventListener("change",e=>{ state.buds=e.target.checked; scheduleRender(); recordHistory(); });
+  const asp=document.getElementById("aspect"); asp.addEventListener("change",()=>{ const [w,h]=asp.value.split(",").map(Number); setAspect(w,h); recordHistory(); });
+  fitWrap();
   // style buttons
   const sb=document.getElementById("styles");
   Object.keys(STYLES).forEach(n=>{ const b=document.createElement("button"); b.className="chip"; b.textContent=n; b.onclick=()=>applyStyle(n); sb.appendChild(b); });
@@ -507,4 +531,4 @@ function init(){
 document.addEventListener("DOMContentLoaded",init);
 
 /* expose for inline handlers */
-Object.assign(window,{randomizeParams,rndSeed,resetCenter,resetLimbs,clearCenters,savePresetFile,loadPresetFile,saveSlot,loadSlot,delSlot,exportPNG,previewVideo,stopPreview,exportVideo,undo,redo,openGallery,closeGallery,rerollGallery,toggleGallery});
+Object.assign(window,{randomizeParams,mutateParams,rndSeed,resetCenter,resetLimbs,clearCenters,savePresetFile,loadPresetFile,saveSlot,loadSlot,delSlot,exportPNG,previewVideo,stopPreview,exportVideo,undo,redo,openGallery,closeGallery,rerollGallery,toggleGallery,setAspect});
