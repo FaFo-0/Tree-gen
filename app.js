@@ -411,30 +411,63 @@ async function previewVideo(){
 }
 function stopPreview(){ previewStop=true; if(previewRAF){clearTimeout(previewRAF);previewRAF=null;} if(state._base!=null){state.seed=state._base;document.getElementById("seedval").textContent=state.seed;state._base=null;} if(previewSavedP){Object.assign(P,previewSavedP);SLIDERS.forEach(s=>showVal(s[0]));previewSavedP=null;} }
 async function exportVideo(){
+  // Frames are rendered offline and encoded with FIXED timestamps (i/fps), so slow
+  // (dense) frames never cause stutter — encoding is decoupled from generation.
   stopPreview();
   const frames=clampInt("vframes",2,600), fps=clampInt("vfps",1,60), mode=document.getElementById("vmode").value, randomize=document.getElementById("vrand").checked;
   const vw=Math.max(200,Math.min(4000,+document.getElementById("vw").value||1000));
   const W=vw-(vw%2), H=Math.round(W*ASPECT)-(Math.round(W*ASPECT)%2);
-  const rc=document.createElement("canvas"); rc.width=W; rc.height=H; const rctx=rc.getContext("2d");
-  const stream=rc.captureStream(fps);
-  let mime="video/webm;codecs=vp9"; if(!MediaRecorder.isTypeSupported(mime))mime="video/webm";
-  const mr=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:16000000});
-  const chunks=[]; mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
-  const done=new Promise(res=>mr.onstop=res);
-  mr.start();
-  state._base=state.seed;
-  const savedP={...P}, savedSeed=state.seed;
-  for(let i=0;i<frames;i++){
-    const opt=frameParams(i,frames,mode,randomize);
-    renderScene(rctx,W,H,{transparent:false,growth:opt.growth});
-    setStatus(`recording ${i+1}/${frames}…`);
-    await sleep(1000/fps);
+  const rc=document.createElement("canvas"); rc.width=W; rc.height=H; const rctx=rc.getContext("2d",{alpha:false});
+  const savedP={...P}, savedSeed=state.seed; state._base=state.seed;
+  const bitrate=Math.min(40e6, Math.round(W*H*fps*0.18));
+  const restore=()=>{ Object.assign(P,savedP); state.seed=savedSeed; state._base=null; SLIDERS.forEach(s=>showVal(s[0])); document.getElementById("seedval").textContent=state.seed; scheduleRender(); };
+  const dl=(blob,ext)=>{ const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`INPUT_OUTPUT_sweep_${stamp()}.${ext}`; a.click(); URL.revokeObjectURL(url); };
+
+  // pick a WebCodecs config: prefer H.264/MP4, then VP9/WebM
+  let plan=null;
+  if(window.VideoEncoder && window.VideoFrame){
+    const cfgs=[];
+    if(window.Mp4Muxer) for(const c of ["avc1.640028","avc1.4d0028","avc1.42e01e"]) cfgs.push({codec:c,cont:"mp4"});
+    if(window.WebMMuxer) for(const c of ["vp09.00.10.08"]) cfgs.push({codec:c,cont:"webm"});
+    for(const cfg of cfgs){ try{ const s=await VideoEncoder.isConfigSupported({codec:cfg.codec,width:W,height:H,bitrate,framerate:fps}); if(s.supported){ plan=cfg; break; } }catch(e){} }
   }
-  mr.stop(); await done;
-  Object.assign(P,savedP); state.seed=savedSeed; state._base=null; SLIDERS.forEach(s=>showVal(s[0])); document.getElementById("seedval").textContent=state.seed;
-  const blob=new Blob(chunks,{type:"video/webm"}); const url=URL.createObjectURL(blob);
-  const a=document.createElement("a"); a.href=url; a.download=`INPUT_OUTPUT_sweep_${stamp()}.webm`; a.click(); URL.revokeObjectURL(url);
-  setStatus("✔ video .webm downloaded"); scheduleRender();
+
+  try{
+    if(plan){
+      let target, muxer, ext, mime;
+      if(plan.cont==="mp4"){ target=new Mp4Muxer.ArrayBufferTarget(); muxer=new Mp4Muxer.Muxer({target,video:{codec:"avc",width:W,height:H},fastStart:"in-memory"}); ext="mp4"; mime="video/mp4"; }
+      else { target=new WebMMuxer.ArrayBufferTarget(); muxer=new WebMMuxer.Muxer({target,video:{codec:"V_VP9",width:W,height:H}}); ext="webm"; mime="video/webm"; }
+      let encErr=null;
+      const enc=new VideoEncoder({ output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta), error:e=>{encErr=e;} });
+      enc.configure({codec:plan.codec,width:W,height:H,bitrate,framerate:fps});
+      const gop=Math.max(1,Math.round(fps));
+      for(let i=0;i<frames;i++){
+        if(encErr) throw encErr;
+        const opt=frameParams(i,frames,mode,randomize);
+        renderScene(rctx,W,H,{transparent:false,growth:opt.growth});
+        const vf=new VideoFrame(rc,{timestamp:Math.round(i*1e6/fps),duration:Math.round(1e6/fps)});
+        enc.encode(vf,{keyFrame:i%gop===0}); vf.close();
+        setStatus(`rendering ${i+1}/${frames} → ${ext.toUpperCase()}…`);
+        while(enc.encodeQueueSize>6) await sleep(4);
+      }
+      await enc.flush(); muxer.finalize();
+      dl(new Blob([target.buffer],{type:mime}), ext);
+      setStatus(`✔ ${ext.toUpperCase()} downloaded — ${frames}f @ ${fps}fps, frame-accurate`);
+      restore(); return;
+    }
+    // fallback (no WebCodecs): PRE-RENDER all frames, then blit at paced fps -> smooth WebM
+    setStatus("pre-rendering frames…");
+    const bmps=[];
+    for(let i=0;i<frames;i++){ const opt=frameParams(i,frames,mode,randomize); renderScene(rctx,W,H,{transparent:false,growth:opt.growth}); bmps.push(await createImageBitmap(rc)); setStatus(`pre-render ${i+1}/${frames}…`); }
+    const disp=document.createElement("canvas"); disp.width=W; disp.height=H; const dctx=disp.getContext("2d");
+    const stream=disp.captureStream(fps); let mime="video/webm;codecs=vp9"; if(!MediaRecorder.isTypeSupported(mime))mime="video/webm";
+    const mr=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:bitrate}); const chunks=[]; mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);}; const done=new Promise(r=>mr.onstop=r); mr.start();
+    for(let i=0;i<frames;i++){ dctx.drawImage(bmps[i],0,0); setStatus(`recording ${i+1}/${frames}…`); await sleep(1000/fps); }
+    mr.stop(); await done; bmps.forEach(b=>b.close&&b.close());
+    dl(new Blob(chunks,{type:"video/webm"}), "webm");
+    setStatus("✔ WebM downloaded (pre-rendered)");
+    restore();
+  }catch(e){ setStatus("video failed: "+(e.message||e)); restore(); }
 }
 
 /* ---------- helpers ---------- */

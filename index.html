@@ -157,7 +157,7 @@
     <button onclick="previewVideo()">▶ Preview</button>
     <button class=alt onclick="stopPreview()">■ Stop</button>
   </div>
-  <div class=btns><button class=alt onclick="exportVideo()">🎬 Export .webm</button></div>
+  <div class=btns><button class=alt onclick="exportVideo()">🎬 Export video (MP4)</button></div>
   <small>Video is WebM (plays in browsers / imports to editors). PNG still is separate & huge-res. Everything runs in your browser — nothing uploaded.</small>
 </div>
 
@@ -197,6 +197,8 @@
   <div id=grid class=grid></div>
 </div>
 
+<script src="mp4-muxer.min.js"></script>
+<script src="webm-muxer.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
