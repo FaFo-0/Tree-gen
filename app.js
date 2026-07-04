@@ -367,9 +367,18 @@ function exportPNG(which){
 }
 
 /* ---------- video (webm via MediaRecorder) + live preview ---------- */
-let previewRAF=null, previewStop=false;
+let previewRAF=null, previewStop=false, previewSavedP=null;
 function frameParams(i,frames,mode,randomize){
   if(mode==="growth"){ return {growth: frames<2?1:i/(frames-1)}; }
+  if(mode==="mutate"){                         // evolve: nudge unlocked params each frame, seed fixed
+    for(const [key,label,mn,mx,st] of SLIDERS){
+      if(locked.has(key)) continue;
+      let v=P[key]+(Math.random()*2-1)*(mx-mn)*0.04;
+      v=Math.max(mn,Math.min(mx,v)); v=mn+Math.round((v-mn)/st)*st;
+      P[key]=INT_KEYS.has(key)?Math.round(v):+v.toFixed(decimals(st)); showVal(key);
+    }
+    return {growth:1};
+  }
   // seed sweep
   state.seed = (state._base??state.seed)+i;
   document.getElementById("seedval").textContent=state.seed;
@@ -379,7 +388,7 @@ function frameParams(i,frames,mode,randomize){
 async function previewVideo(){
   stopPreview();
   const frames=clampInt("vframes",2,600), fps=clampInt("vfps",1,60), mode=document.getElementById("vmode").value, randomize=document.getElementById("vrand").checked;
-  state._base=state.seed; previewStop=false;
+  state._base=state.seed; previewSavedP={...P}; previewStop=false;
   let i=0;
   const tick=()=>{
     if(previewStop) return;
@@ -391,7 +400,7 @@ async function previewVideo(){
   };
   tick();
 }
-function stopPreview(){ previewStop=true; if(previewRAF){clearTimeout(previewRAF);previewRAF=null;} if(state._base!=null){state.seed=state._base;document.getElementById("seedval").textContent=state.seed;state._base=null;} }
+function stopPreview(){ previewStop=true; if(previewRAF){clearTimeout(previewRAF);previewRAF=null;} if(state._base!=null){state.seed=state._base;document.getElementById("seedval").textContent=state.seed;state._base=null;} if(previewSavedP){Object.assign(P,previewSavedP);SLIDERS.forEach(s=>showVal(s[0]));previewSavedP=null;} }
 async function exportVideo(){
   stopPreview();
   const frames=clampInt("vframes",2,600), fps=clampInt("vfps",1,60), mode=document.getElementById("vmode").value, randomize=document.getElementById("vrand").checked;
