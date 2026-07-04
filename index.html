@@ -50,6 +50,17 @@
  #ov{cursor:crosshair}
  #status{color:var(--dim);font-size:12px;min-height:16px}
  .hint{position:absolute;top:8px;left:12px;color:var(--dim);font-size:11px;background:rgba(0,0,0,.35);padding:3px 8px;border-radius:5px;pointer-events:none}
+ /* gallery modal */
+ .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:20;padding:22px;flex-direction:column;gap:14px}
+ .modal.open{display:flex}
+ .modal-h{display:flex;justify-content:space-between;align-items:center;color:#fff}
+ .modal-h span{display:flex;gap:8px}
+ .modal-h button{flex:0 0 auto;padding:7px 12px}
+ .grid{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+ .grid .cell{background:#fff;border-radius:6px;overflow:hidden;cursor:pointer;border:2px solid transparent;position:relative}
+ .grid .cell:hover{border-color:var(--accent)}
+ .grid .cell canvas{width:100%;display:block}
+ .grid .cell .cap{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 6px}
 </style>
 </head>
 <body>
@@ -69,14 +80,21 @@
     <button onclick="randomizeParams()">🎲 Randomize params</button>
   </div>
   <div class=btns>
+    <button class=alt onclick="undo()" title="Ctrl+Z">↶ Undo</button>
+    <button class=alt onclick="redo()" title="Ctrl+Shift+Z">↷ Redo</button>
+    <button class=alt onclick="openGallery()" title="G">🖼 Gallery</button>
+  </div>
+  <div class=btns>
     <button class=alt onclick="resetCenter()">✛ Center</button>
     <button class=alt onclick="resetLimbs()">↺ Limbs</button>
+    <button class=alt onclick="clearCenters()" title="shift-click canvas adds a center">✕ multi</button>
   </div>
 
   <div class=chk><input type=checkbox id=tree_mode><label for=tree_mode>Tree forks (off = Bushy / denser)</label></div>
   <div class=chk><input type=checkbox id=round_joints checked><label for=round_joints>Round joints (smooth)</label></div>
   <div class=chk><input type=checkbox id=mirror><label for=mirror>Mirror (with symmetry)</label></div>
   <div class=chk><input type=checkbox id=soft_tips><label for=soft_tips>Soft gray tips</label></div>
+  <div class=chk><input type=checkbox id=breeze><label for=breeze>🍃 Breeze (animate wind live)</label></div>
   <div class=chk><input type=checkbox id=white_bg checked><label for=white_bg>White background (off = transparent)</label></div>
 
   <div id=sliders></div>
@@ -129,6 +147,13 @@
     <div class=hint>click = move center · drag a dot = aim a limb</div>
   </div>
   <div id=status>…</div>
+</div>
+
+<div id=gallery class=modal>
+  <div class=modal-h><b>Pick a composition (seed)</b>
+    <span><button class=alt onclick="rerollGallery()">↻ reroll</button><button class=alt onclick="closeGallery()">✕ close</button></span>
+  </div>
+  <div id=grid class=grid></div>
 </div>
 
 <script src="app.js"></script>

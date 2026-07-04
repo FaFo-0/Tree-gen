@@ -74,79 +74,84 @@ const CAP = 1500000;
 const P = {};                                  // current param values
 SLIDERS.forEach(s=>P[s[0]]=s[5]);
 let state = {
-  seed:8, center_x:0.5, center_y:0.5,
+  seed:8, center_x:0.5, center_y:0.5, extra:[],
   fork_mode:"bushy", round_joints:true, soft_tips:false, mirror:false, white_bg:true,
 };
 const locked = new Set();
-let limbAims = [];                              // per-main-limb aim override (radians) or undefined
-let lastMain = [];                             // {ang} for each main limb (for handles)
+let limbAims = [];                              // per-main-limb aim override (radians) or undefined (primary center only)
+let lastCenters = [];                           // [{x,y,aims:[...]}] for handle drawing
+function centersList(){ return [{x:state.center_x,y:state.center_y}, ...state.extra]; }
 
 /* ---------- core: draw branches to a (transparent) layer ---------- */
 function drawBranches(ctx, W, H, growthR){
   RNG = mulberry32(state.seed>>>0);
   const sc = W/2000;
-  const cx = W*state.center_x, cy = H*state.center_y;
   const step = P.step_px*sc, minw = P.min_width*sc;
   const bushy = state.fork_mode==="bushy";
   ctx.lineCap = state.round_joints?"round":"butt";
   ctx.lineJoin = state.round_joints?"round":"miter";
   ctx.strokeStyle = "#000";
   let steps = 0;
-  const stack = [];
   const n = P.n_main|0, diag = Math.hypot(W,H);
-  lastMain = [];
-  for(let i=0;i<n;i++){
-    let a = (2*Math.PI*i/n) + uni(-P.center_jitter,P.center_jitter);
-    let reach = reachFn(cx,cy,a,W,H);
-    if(reach < 0.10*diag){ const tx=uni(0.05,0.95)*W, ty=uni(0.05,0.95)*H; a=Math.atan2(ty-cy,tx-cx); reach=reachFn(cx,cy,a,W,H); }
-    const rr = P.center_radius*sc*Math.sqrt(RNG());
-    const saa = uni(0,2*Math.PI);
-    const sx = cx+Math.cos(saa)*rr, sy = cy+Math.sin(saa)*rr;
-    let L = Math.max(P.init_length*sc, reach*(1-P.fork_len_ratio)*uni(1.0,1.3));
-    let ang0 = a + uni(-P.limb_swirl,P.limb_swirl);
-    if(limbAims[i]!=null){ ang0 = limbAims[i]; const rr2=reachFn(cx,cy,ang0,W,H); L=Math.max(P.init_length*sc, rr2*(1-P.fork_len_ratio)*1.15); }
-    lastMain.push(ang0);
-    stack.push([sx,sy,ang0, uni(0.85,1.0)*P.init_width*sc, L, 0, true]);
-  }
+  const centers = centersList(), single = centers.length===1;
   const wx = P.wind_x, wy = P.wind_y;
-  while(stack.length && steps<CAP){
-    let [x,y,ang,wid,length,depth,isMain] = stack.pop();
-    if(depth>P.max_depth || wid<minw) continue;
-    const curl = gauss(0,P.curl);
-    let life = length; const w0 = wid, seglen = length;
-    while(life>0 && wid>minw && steps<CAP){
-      ang += curl + gauss(0,P.wander);
-      const desired = Math.atan2(y-cy,x-cx);
-      let diff = (desired-ang+Math.PI)%(2*Math.PI)-Math.PI;
-      ang += P.radial_pull*diff*(isMain?P.main_pull:0.5);
-      const nx = x+(Math.cos(ang)+wx)*step, ny = y+(Math.sin(ang)+wy)*step;
-      if(growthR===Infinity || Math.hypot(nx-cx,ny-cy)<=growthR){
-        let col = "#000";
-        if(state.soft_tips && wid<1.8*sc){ const c=Math.round(75*(1-wid/(1.8*sc))); col=`rgb(${c},${c},${c})`; }
-        ctx.strokeStyle = col;
-        ctx.lineWidth = Math.max(1,wid);
-        ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(nx,ny); ctx.stroke();
-      }
-      x=nx; y=ny; wid*=P.taper; life-=step; steps++;
-      if(RNG()<P.side_prob && wid>P.twig_floor*minw){
-        const sa = ang + pm()*(P.side_angle+uni(-0.25,0.25));
-        stack.push([x,y,sa, wid*P.side_wid_ratio, seglen*P.side_len_ratio, depth+2, false]);
-      }
+  lastCenters = [];
+  for(let ci=0; ci<centers.length; ci++){
+    const cx = centers[ci].x*W, cy = centers[ci].y*H;
+    const aimsRec = [], stack = [];
+    for(let i=0;i<n;i++){
+      let a = (2*Math.PI*i/n) + uni(-P.center_jitter,P.center_jitter);
+      let reach = reachFn(cx,cy,a,W,H);
+      if(reach < 0.10*diag){ const tx=uni(0.05,0.95)*W, ty=uni(0.05,0.95)*H; a=Math.atan2(ty-cy,tx-cx); reach=reachFn(cx,cy,a,W,H); }
+      const rr = P.center_radius*sc*Math.sqrt(RNG());
+      const saa = uni(0,2*Math.PI);
+      const sx = cx+Math.cos(saa)*rr, sy = cy+Math.sin(saa)*rr;
+      let L = Math.max(P.init_length*sc, reach*(1-P.fork_len_ratio)*uni(1.0,1.3));
+      let ang0 = a + uni(-P.limb_swirl,P.limb_swirl);
+      if(single && limbAims[i]!=null){ ang0 = limbAims[i]; const rr2=reachFn(cx,cy,ang0,W,H); L=Math.max(P.init_length*sc, rr2*(1-P.fork_len_ratio)*1.15); }
+      aimsRec.push(ang0);
+      stack.push([sx,sy,ang0, uni(0.85,1.0)*P.init_width*sc, L, 0, true]);
     }
-    if(depth<P.max_depth && wid>minw){
-      const sp = P.fork_angle+uni(0,P.fork_angle_var);
-      const base_len = seglen*P.fork_len_ratio, ew = wid;
-      if(bushy){
-        const cw = ew*P.fork_wid_ratio, cl = base_len*uni(0.85,1.1);
-        for(const s of [-1,1]) stack.push([x,y,ang+s*sp*uni(0.7,1.2), cw*uni(0.85,1.05), cl, depth+1, isMain]);
-        if(RNG()<P.third_fork_prob) stack.push([x,y,ang+uni(-0.3,0.3), cw*0.85, cl*0.85, depth+1, false]);
-      } else {
-        const asym = P.fork_asymmetry, side = pm();
-        const dom_w = ew*(0.98-0.06*(1-asym)), dom_ang = ang-side*sp*(0.30*(1-asym)), dom_len = base_len*uni(0.9,1.05);
-        stack.push([x,y,dom_ang,dom_w,dom_len,depth+1,isMain]);
-        const min_w = ew*(0.82-0.34*asym), min_ang = ang+side*sp*(1+0.4*asym), min_len = base_len*(1-0.30*asym)*uni(0.85,1.05);
-        stack.push([x,y,min_ang,min_w*uni(0.9,1.05),min_len,depth+1,false]);
-        if(RNG()<P.third_fork_prob) stack.push([x,y,ang+pm()*sp*0.6, min_w*0.8, min_len*0.85, depth+1, false]);
+    lastCenters.push({x:centers[ci].x, y:centers[ci].y, aims:aimsRec});
+    while(stack.length && steps<CAP){
+      let [x,y,ang,wid,length,depth,isMain] = stack.pop();
+      if(depth>P.max_depth || wid<minw) continue;
+      const curl = gauss(0,P.curl);
+      let life = length; const seglen = length;
+      while(life>0 && wid>minw && steps<CAP){
+        ang += curl + gauss(0,P.wander);
+        const desired = Math.atan2(y-cy,x-cx);
+        let diff = (desired-ang+Math.PI)%(2*Math.PI)-Math.PI;
+        ang += P.radial_pull*diff*(isMain?P.main_pull:0.5);
+        const nx = x+(Math.cos(ang)+wx)*step, ny = y+(Math.sin(ang)+wy)*step;
+        if(growthR===Infinity || Math.hypot(nx-cx,ny-cy)<=growthR){
+          let col = "#000";
+          if(state.soft_tips && wid<1.8*sc){ const c=Math.round(75*(1-wid/(1.8*sc))); col=`rgb(${c},${c},${c})`; }
+          ctx.strokeStyle = col;
+          ctx.lineWidth = Math.max(1,wid);
+          ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(nx,ny); ctx.stroke();
+        }
+        x=nx; y=ny; wid*=P.taper; life-=step; steps++;
+        if(RNG()<P.side_prob && wid>P.twig_floor*minw){
+          const sa2 = ang + pm()*(P.side_angle+uni(-0.25,0.25));
+          stack.push([x,y,sa2, wid*P.side_wid_ratio, seglen*P.side_len_ratio, depth+2, false]);
+        }
+      }
+      if(depth<P.max_depth && wid>minw){
+        const sp = P.fork_angle+uni(0,P.fork_angle_var);
+        const base_len = seglen*P.fork_len_ratio, ew = wid;
+        if(bushy){
+          const cw = ew*P.fork_wid_ratio, cl = base_len*uni(0.85,1.1);
+          for(const s of [-1,1]) stack.push([x,y,ang+s*sp*uni(0.7,1.2), cw*uni(0.85,1.05), cl, depth+1, isMain]);
+          if(RNG()<P.third_fork_prob) stack.push([x,y,ang+uni(-0.3,0.3), cw*0.85, cl*0.85, depth+1, false]);
+        } else {
+          const asym = P.fork_asymmetry, side = pm();
+          const dom_w = ew*(0.98-0.06*(1-asym)), dom_ang = ang-side*sp*(0.30*(1-asym)), dom_len = base_len*uni(0.9,1.05);
+          stack.push([x,y,dom_ang,dom_w,dom_len,depth+1,isMain]);
+          const min_w = ew*(0.82-0.34*asym), min_ang = ang+side*sp*(1+0.4*asym), min_len = base_len*(1-0.30*asym)*uni(0.85,1.05);
+          stack.push([x,y,min_ang,min_w*uni(0.9,1.05),min_len,depth+1,false]);
+          if(RNG()<P.third_fork_prob) stack.push([x,y,ang+pm()*sp*0.6, min_w*0.8, min_len*0.85, depth+1, false]);
+        }
       }
     }
   }
@@ -200,44 +205,49 @@ function renderDisplay(){
 
 /* ---------- main-limb handles overlay ---------- */
 function sizeOverlay(){ const r=cvs.getBoundingClientRect(); ov.width=Math.max(1,Math.round(r.width)); ov.height=Math.max(1,Math.round(r.height)); }
-let handlePts=[];
+let handlePts=[], centerPts=[];
 function drawHandles(){
   sizeOverlay();
   const octx=ov.getContext("2d"); octx.clearRect(0,0,ov.width,ov.height);
-  const cxD=state.center_x*ov.width, cyD=state.center_y*ov.height;
   const R=Math.min(ov.width,ov.height)*0.14;
-  handlePts=[];
-  // center marker
-  octx.strokeStyle="rgba(90,180,255,.9)"; octx.lineWidth=1.5;
-  octx.beginPath(); octx.arc(cxD,cyD,6,0,7); octx.stroke();
-  octx.beginPath(); octx.moveTo(cxD-9,cyD); octx.lineTo(cxD+9,cyD); octx.moveTo(cxD,cyD-9); octx.lineTo(cxD,cyD+9); octx.stroke();
-  for(let i=0;i<lastMain.length;i++){
-    const a=lastMain[i], hx=cxD+Math.cos(a)*R, hy=cyD+Math.sin(a)*R;
-    handlePts.push({x:hx,y:hy,i});
-    octx.strokeStyle="rgba(120,200,120,.55)"; octx.lineWidth=1;
-    octx.beginPath(); octx.moveTo(cxD,cyD); octx.lineTo(hx,hy); octx.stroke();
-    octx.fillStyle= limbAims[i]!=null?"#ffcf3f":"#6cf";
-    octx.beginPath(); octx.arc(hx,hy,5,0,7); octx.fill();
-  }
+  handlePts=[]; centerPts=[];
+  const single=lastCenters.length===1;
+  lastCenters.forEach((C,ci)=>{
+    const cxD=C.x*ov.width, cyD=C.y*ov.height;
+    centerPts.push({x:cxD,y:cyD,ci});
+    octx.strokeStyle="rgba(90,180,255,.9)"; octx.lineWidth=1.5;
+    octx.beginPath(); octx.arc(cxD,cyD,6,0,7); octx.stroke();
+    octx.beginPath(); octx.moveTo(cxD-9,cyD); octx.lineTo(cxD+9,cyD); octx.moveTo(cxD,cyD-9); octx.lineTo(cxD,cyD+9); octx.stroke();
+    if(single){
+      C.aims.forEach((a,li)=>{
+        const hx=cxD+Math.cos(a)*R, hy=cyD+Math.sin(a)*R;
+        handlePts.push({x:hx,y:hy,li});
+        octx.strokeStyle="rgba(120,200,120,.55)"; octx.lineWidth=1;
+        octx.beginPath(); octx.moveTo(cxD,cyD); octx.lineTo(hx,hy); octx.stroke();
+        octx.fillStyle= limbAims[li]!=null?"#ffcf3f":"#6cf";
+        octx.beginPath(); octx.arc(hx,hy,5,0,7); octx.fill();
+      });
+    }
+  });
 }
-/* interactions */
+/* interactions: click=move nearest center · shift-click=add center · drag dot=aim limb */
 let drag=null;
 function ovPos(e){ const r=ov.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top, r}; }
+function setCenter(ci,fx,fy){ fx=Math.min(1,Math.max(0,fx)); fy=Math.min(1,Math.max(0,fy)); if(ci===0){state.center_x=fx;state.center_y=fy;} else {state.extra[ci-1]={x:fx,y:fy};} }
 ov.addEventListener("mousedown",e=>{
   const p=ovPos(e);
-  let hit=null,best=18;
-  for(const h of handlePts){ const d=Math.hypot(h.x-p.x,h.y-p.y); if(d<best){best=d;hit=h;} }
-  if(hit){ drag={type:"limb",i:hit.i}; }
-  else { drag={type:"center"}; state.center_x=p.x/p.r.width; state.center_y=p.y/p.r.height; scheduleRender(); }
+  if(!e.shiftKey){ let hit=null,best=18; for(const h of handlePts){const d=Math.hypot(h.x-p.x,h.y-p.y);if(d<best){best=d;hit=h;}} if(hit){drag={type:"limb",li:hit.li};return;} }
+  if(e.shiftKey){ state.extra.push({x:p.x/p.r.width,y:p.y/p.r.height}); drag={type:"center",ci:state.extra.length}; scheduleRender(); return; }
+  let ci=0,bd=1e9; centerPts.forEach(c=>{const d=Math.hypot(c.x-p.x,c.y-p.y); if(d<bd){bd=d;ci=c.ci;}});
+  drag={type:"center",ci}; setCenter(ci,p.x/p.r.width,p.y/p.r.height); scheduleRender();
 });
 window.addEventListener("mousemove",e=>{
-  if(!drag) return;
-  const p=ovPos(e);
-  const cxD=state.center_x*p.r.width, cyD=state.center_y*p.r.height;
-  if(drag.type==="limb"){ limbAims[drag.i]=Math.atan2(p.y-cyD,p.x-cxD); scheduleRender(); }
-  else if(drag.type==="center"){ state.center_x=Math.min(1,Math.max(0,p.x/p.r.width)); state.center_y=Math.min(1,Math.max(0,p.y/p.r.height)); scheduleRender(); }
+  if(!drag) return; const p=ovPos(e);
+  if(drag.type==="limb"){ const C=centersList()[0]; const cxD=C.x*p.r.width, cyD=C.y*p.r.height; limbAims[drag.li]=Math.atan2(p.y-cyD,p.x-cxD); scheduleRender(); }
+  else { setCenter(drag.ci, p.x/p.r.width, p.y/p.r.height); scheduleRender(); }
 });
-window.addEventListener("mouseup",()=>{drag=null;});
+window.addEventListener("mouseup",()=>{ if(drag){drag=null; recordHistory();} });
+function clearCenters(){ state.extra=[]; scheduleRender(); recordHistory(); }
 
 /* ---------- UI build ---------- */
 const panel=document.getElementById("sliders");
@@ -283,9 +293,9 @@ function randomizeParams(){
     P[key]=INT_KEYS.has(key)?Math.round(v):+v.toFixed(decimals(st));
     showVal(key);
   }
-  limbAims=[]; scheduleRender();
+  limbAims=[]; scheduleRender(); recordHistory();
 }
-function rndSeed(){ state.seed=Math.floor(Math.random()*1e6); document.getElementById("seedval").textContent=state.seed; scheduleRender(); }
+function rndSeed(){ state.seed=Math.floor(Math.random()*1e6); document.getElementById("seedval").textContent=state.seed; scheduleRender(); recordHistory(); }
 
 /* ---------- style presets ---------- */
 const STYLES = {
@@ -299,7 +309,7 @@ const STYLES = {
 function applyStyle(name){
   const s=STYLES[name]; if(!s)return;
   for(const k in s){ if(k in P){P[k]=s[k];showVal(k);} else if(k==="fork_mode"){state.fork_mode=s[k];document.getElementById("tree_mode").checked=(s[k]==="tree");} }
-  limbAims=[]; scheduleRender();
+  limbAims=[]; scheduleRender(); recordHistory();
 }
 
 /* ---------- presets (localStorage + file) ---------- */
@@ -316,7 +326,7 @@ function applySnapshot(o){
   document.getElementById("soft_tips").checked=state.soft_tips;
   document.getElementById("mirror").checked=state.mirror;
   document.getElementById("white_bg").checked=state.white_bg;
-  limbAims=[]; scheduleRender();
+  limbAims=[]; scheduleRender(); recordHistory();
 }
 function savePresetFile(){
   const blob=new Blob([JSON.stringify(snapshot(),null,2)],{type:"application/json"});
@@ -402,8 +412,76 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 function stamp(){return new Date().toISOString().replace(/[-:T]/g,"").slice(0,15);}
 function clampInt(id,a,b){return Math.max(a,Math.min(b,+document.getElementById(id).value||a));}
 function setStatus(t){document.getElementById("status").textContent=t;}
-function resetCenter(){ state.center_x=0.5; state.center_y=0.5; scheduleRender(); }
-function resetLimbs(){ limbAims=[]; scheduleRender(); }
+function resetCenter(){ state.center_x=0.5; state.center_y=0.5; scheduleRender(); recordHistory(); }
+function resetLimbs(){ limbAims=[]; scheduleRender(); recordHistory(); }
+
+/* ---------- undo / redo ---------- */
+let history=[], hidx=-1, suppress=false;
+function recordHistory(){
+  if(suppress) return;
+  const snap=JSON.stringify(snapshot());
+  if(history[hidx]===snap) return;
+  history=history.slice(0,hidx+1); history.push(snap);
+  if(history.length>80) history.shift();
+  hidx=history.length-1;
+}
+function undo(){ if(hidx<=0)return; hidx--; suppress=true; applySnapshot(JSON.parse(history[hidx])); suppress=false; setStatus("undo"); }
+function redo(){ if(hidx>=history.length-1)return; hidx++; suppress=true; applySnapshot(JSON.parse(history[hidx])); suppress=false; setStatus("redo"); }
+
+/* ---------- seed gallery (contact sheet) ---------- */
+let galBase=8;
+function openGallery(){ galBase=state.seed; document.getElementById("gallery").classList.add("open"); renderGallery(); }
+function closeGallery(){ document.getElementById("gallery").classList.remove("open"); }
+function toggleGallery(){ document.getElementById("gallery").classList.contains("open")?closeGallery():openGallery(); }
+function rerollGallery(){ galBase=Math.floor(Math.random()*1e6); renderGallery(); }
+function renderGallery(){
+  const grid=document.getElementById("grid"); grid.innerHTML="";
+  const saved=state.seed, TW=380, TH=Math.round(TW*ASPECT);
+  for(let i=0;i<12;i++){
+    const seed=(galBase+i)>>>0;
+    const cell=document.createElement("div"); cell.className="cell";
+    const cv=document.createElement("canvas"); cv.width=TW; cv.height=TH;
+    state.seed=seed; renderScene(cv.getContext("2d"),TW,TH,{});
+    cell.appendChild(cv);
+    const cap=document.createElement("div"); cap.className="cap"; cap.textContent="seed "+seed; cell.appendChild(cap);
+    cell.onclick=()=>{ state.seed=seed; document.getElementById("seedval").textContent=seed; closeGallery(); scheduleRender(); recordHistory(); };
+    grid.appendChild(cell);
+  }
+  state.seed=saved;
+}
+
+/* ---------- breeze (live wind animation) ---------- */
+let breezeRAF=null, breezeT=0, breezeBase=null;
+function toggleBreeze(on){
+  if(on){
+    breezeBase={x:P.wind_x,y:P.wind_y}; breezeT=0;
+    const step=()=>{
+      breezeT+=0.05;
+      P.wind_x=breezeBase.x+0.14*Math.sin(breezeT*0.9);
+      P.wind_y=breezeBase.y+0.05*Math.sin(breezeT*0.6+1);
+      showVal("wind_x"); showVal("wind_y");
+      renderScene(cctx,PW,PH,{transparent:!state.white_bg}); drawHandles();
+      breezeRAF=requestAnimationFrame(step);
+    };
+    step();
+  } else {
+    if(breezeRAF) cancelAnimationFrame(breezeRAF); breezeRAF=null;
+    if(breezeBase){ P.wind_x=breezeBase.x; P.wind_y=breezeBase.y; showVal("wind_x"); showVal("wind_y"); breezeBase=null; }
+    scheduleRender();
+  }
+}
+
+/* ---------- keyboard shortcuts ---------- */
+function onKey(e){
+  const t=document.activeElement; if(t&&/INPUT|SELECT|TEXTAREA/.test(t.tagName)) return;
+  if(e.ctrlKey||e.metaKey){ if(e.key.toLowerCase()==="z"){ e.preventDefault(); e.shiftKey?redo():undo(); } else if(e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); } return; }
+  const k=e.key.toLowerCase();
+  if(k==="r") randomizeParams();
+  else if(k==="s") rndSeed();
+  else if(k==="c") resetCenter();
+  else if(k==="g") toggleGallery();
+  else if(k==="escape") closeGallery();
+}
 
 /* ---------- init ---------- */
 function init(){
@@ -414,15 +492,19 @@ function init(){
   bindToggle("mirror","mirror");
   bindToggle("white_bg","white_bg");
   const tm=document.getElementById("tree_mode"); tm.checked=false;
-  tm.addEventListener("change",()=>{ state.fork_mode=tm.checked?"tree":"bushy"; scheduleRender(); });
+  tm.addEventListener("change",()=>{ state.fork_mode=tm.checked?"tree":"bushy"; scheduleRender(); recordHistory(); });
+  document.getElementById("breeze").addEventListener("change",e=>toggleBreeze(e.target.checked));
   // style buttons
   const sb=document.getElementById("styles");
   Object.keys(STYLES).forEach(n=>{ const b=document.createElement("button"); b.className="chip"; b.textContent=n; b.onclick=()=>applyStyle(n); sb.appendChild(b); });
   refreshSlots();
+  document.getElementById("sliders").addEventListener("change",recordHistory);  // commit param change to history
+  window.addEventListener("keydown",onKey);
   window.addEventListener("resize",()=>drawHandles());
   renderDisplay();
+  recordHistory();                            // initial state
 }
 document.addEventListener("DOMContentLoaded",init);
 
 /* expose for inline handlers */
-Object.assign(window,{randomizeParams,rndSeed,resetCenter,resetLimbs,savePresetFile,loadPresetFile,saveSlot,loadSlot,delSlot,exportPNG,previewVideo,stopPreview,exportVideo});
+Object.assign(window,{randomizeParams,rndSeed,resetCenter,resetLimbs,clearCenters,savePresetFile,loadPresetFile,saveSlot,loadSlot,delSlot,exportPNG,previewVideo,stopPreview,exportVideo,undo,redo,openGallery,closeGallery,rerollGallery,toggleGallery});
