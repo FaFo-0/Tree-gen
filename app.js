@@ -65,7 +65,8 @@ const GROUPS = [
   ]],
 ];
 const SLIDERS = GROUPS.flatMap(g=>g[1]);
-const INT_KEYS = new Set(["n_main","max_depth","symmetry"]);
+const INT_KEYS = new Set(["n_main","max_depth"]);
+const NO_RANDOM = new Set(["wind_x","wind_y"]);   // wind adds a global directional bias — keep it manual/opt-in, never randomized
 const CAP = 1500000;
 
 /* live state */
@@ -283,6 +284,7 @@ function bindToggle(id,prop){ const el=document.getElementById(id); el.checked=s
 function randomizeParams(){
   for(const [key,label,mn,mx,st] of SLIDERS){
     if(locked.has(key)) continue;
+    if(NO_RANDOM.has(key)){ P[key]=0; showVal(key); continue; }   // zero wind -> no directional bias
     const steps=Math.round((mx-mn)/st);
     let v=mn+st*Math.floor(Math.random()*(steps+1));
     P[key]=INT_KEYS.has(key)?Math.round(v):+v.toFixed(decimals(st));
@@ -292,7 +294,7 @@ function randomizeParams(){
 }
 function mutateParams(){                          // nudge unlocked params ±12% of range (explore nearby)
   for(const [key,label,mn,mx,st] of SLIDERS){
-    if(locked.has(key)) continue;
+    if(locked.has(key) || NO_RANDOM.has(key)) continue;
     let v = P[key] + (Math.random()*2-1)*(mx-mn)*0.12;
     v = Math.max(mn,Math.min(mx,v));
     v = mn + Math.round((v-mn)/st)*st;
