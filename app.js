@@ -66,7 +66,6 @@ const GROUPS = [
 ];
 const SLIDERS = GROUPS.flatMap(g=>g[1]);
 const INT_KEYS = new Set(["n_main","max_depth"]);
-const NO_RANDOM = new Set(["wind_x","wind_y"]);   // wind adds a global directional bias — keep it manual/opt-in, never randomized
 const CAP = 1500000;
 
 /* live state */
@@ -122,7 +121,10 @@ function drawBranches(ctx, W, H, growthR){
       while(life>0 && wid>minw && steps<CAP){
         ang += curl + gauss(0,P.wander);
         const desired = Math.atan2(y-cy,x-cx);
-        let diff = (desired-ang+Math.PI)%(2*Math.PI)-Math.PI;
+        // signed smallest angle from ang to desired, in [-π,π]. MUST use atan2(sin,cos):
+        // JS "%" keeps the sign of the dividend, so (a % 2π)-π is wrong for negatives
+        // (Python's floored "%" doesn't) — that mismatch was biasing growth one direction.
+        const diff = Math.atan2(Math.sin(desired-ang), Math.cos(desired-ang));
         ang += P.radial_pull*diff*(isMain?P.main_pull:0.5);
         const nx = x+(Math.cos(ang)+wx)*step, ny = y+(Math.sin(ang)+wy)*step;
         if(growthR===Infinity || Math.hypot(nx-cx,ny-cy)<=growthR){
@@ -221,7 +223,7 @@ function pick(p){ // returns {type:'center',ci} | {type:'limb',li} | null
     const C=lastCenters[0], cxD=C.x*p.r.width, cyD=C.y*p.r.height;
     const dist=Math.hypot(p.x-cxD,p.y-cyD);
     if(dist>18){ const ca=Math.atan2(p.y-cyD,p.x-cxD); let li=-1,ba=0.22;
-      C.aims.forEach((a,idx)=>{ const da=Math.abs(((ca-a+Math.PI)%(2*Math.PI))-Math.PI); if(da<ba){ba=da;li=idx;} });
+      C.aims.forEach((a,idx)=>{ const da=Math.abs(Math.atan2(Math.sin(ca-a),Math.cos(ca-a))); if(da<ba){ba=da;li=idx;} });
       if(li>=0) return {type:"limb",li};
     }
   }
@@ -284,7 +286,6 @@ function bindToggle(id,prop){ const el=document.getElementById(id); el.checked=s
 function randomizeParams(){
   for(const [key,label,mn,mx,st] of SLIDERS){
     if(locked.has(key)) continue;
-    if(NO_RANDOM.has(key)){ P[key]=0; showVal(key); continue; }   // zero wind -> no directional bias
     const steps=Math.round((mx-mn)/st);
     let v=mn+st*Math.floor(Math.random()*(steps+1));
     P[key]=INT_KEYS.has(key)?Math.round(v):+v.toFixed(decimals(st));
@@ -294,7 +295,7 @@ function randomizeParams(){
 }
 function mutateParams(){                          // nudge unlocked params ±12% of range (explore nearby)
   for(const [key,label,mn,mx,st] of SLIDERS){
-    if(locked.has(key) || NO_RANDOM.has(key)) continue;
+    if(locked.has(key)) continue;
     let v = P[key] + (Math.random()*2-1)*(mx-mn)*0.12;
     v = Math.max(mn,Math.min(mx,v));
     v = mn + Math.round((v-mn)/st)*st;
@@ -516,6 +517,7 @@ function init(){
   // style buttons
   const sb=document.getElementById("styles");
   Object.keys(STYLES).forEach(n=>{ const b=document.createElement("button"); b.className="chip"; b.textContent=n; b.onclick=()=>applyStyle(n); sb.appendChild(b); });
+  setLock("wind_x",true); setLock("wind_y",true);   // wind locked at 0 by default (opt-in; unlock to use wind/Breeze)
   refreshSlots();
   document.getElementById("sliders").addEventListener("change",recordHistory);  // commit param change to history
   window.addEventListener("keydown",onKey);
