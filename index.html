@@ -61,11 +61,21 @@
  .grid .cell:hover{border-color:var(--accent)}
  .grid .cell canvas{width:100%;display:block}
  .grid .cell .cap{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 6px}
+ #help .body{color:#cfcfd4;overflow:auto;line-height:1.75;max-width:640px}
+ #help .body b{color:#fff} #help kbd{background:#26262b;border:1px solid #3a3a42;border-radius:4px;padding:1px 6px;font-family:monospace;color:#9cf}
+ #help-btn{float:right;cursor:pointer;color:#6cf;font-weight:700}
+ #menu{display:none}
+ @media(max-width:820px){
+   body{flex-direction:column;overflow:auto;height:auto}
+   #panel{width:100%;height:auto;max-height:52vh;border-right:0;border-bottom:1px solid var(--line)}
+   #stage{padding:12px;min-height:44vh}
+   .grid{grid-template-columns:repeat(2,1fr)}
+ }
 </style>
 </head>
 <body>
 <div id=panel>
-  <h1>INPUT / OUTPUT</h1>
+  <h1>INPUT / OUTPUT <span id=help-btn onclick="openHelp()" title="help &amp; shortcuts">?</span></h1>
   <div class=sub>branch · root · rhizome generator — 100% algorithmic</div>
 
   <div class=seedrow>
@@ -159,6 +169,26 @@
     <div class=hint>click = move center · drag a dot = aim a limb</div>
   </div>
   <div id=status>…</div>
+</div>
+
+<div id=help class=modal>
+  <div class=modal-h><b>Help &amp; shortcuts</b><span><button class=alt onclick="closeHelp()">✕ close</button></span></div>
+  <div class=body>
+    <p><b>Canvas</b><br>
+      • <b>Click</b> the canvas to move the center.<br>
+      • <b>Shift-click</b> to add another center (forests / rhizome networks); <kbd>✕ multi</kbd> clears extras.<br>
+      • <b>Drag a green/blue dot</b> to aim a main limb (single-center only). <kbd>↺ Limbs</kbd> resets aims.</p>
+    <p><b>Shortcuts</b><br>
+      <kbd>R</kbd> randomize params · <kbd>M</kbd> mutate (nudge) · <kbd>S</kbd> random seed · <kbd>C</kbd> reset center · <kbd>G</kbd> gallery · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redo · <kbd>Esc</kbd> close</p>
+    <p><b>Ideas</b><br>
+      • Lock 🔒 the params you like, then Randomize / Mutate to explore the rest.<br>
+      • <b>Styles</b>: Root system, Dense tree, Rhizome, Windswept, Mandala, Neuron.<br>
+      • <b>Mandala</b> uses radial symmetry — combine with Mirror.<br>
+      • <b>Breeze</b> animates the wind live; <b>Wind ↓</b> = gravity for hanging roots.<br>
+      • <b>Gallery</b> shows 12 seeds — click one to load it.<br>
+      • Export a huge PNG for print, or a WebM seed-sweep / growth video.</p>
+    <p><b>Everything runs in your browser.</b> Nothing is uploaded. 100% algorithmic — no AI.</p>
+  </div>
 </div>
 
 <div id=gallery class=modal>

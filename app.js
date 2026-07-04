@@ -454,6 +454,8 @@ function openGallery(){ galBase=state.seed; document.getElementById("gallery").c
 function closeGallery(){ document.getElementById("gallery").classList.remove("open"); }
 function toggleGallery(){ document.getElementById("gallery").classList.contains("open")?closeGallery():openGallery(); }
 function rerollGallery(){ galBase=Math.floor(Math.random()*1e6); renderGallery(); }
+function openHelp(){ document.getElementById("help").classList.add("open"); }
+function closeHelp(){ document.getElementById("help").classList.remove("open"); }
 function renderGallery(){
   const grid=document.getElementById("grid"); grid.innerHTML="";
   const saved=state.seed, TW=380, TH=Math.round(TW*ASPECT);
@@ -501,7 +503,8 @@ function onKey(e){
   else if(k==="s") rndSeed();
   else if(k==="c") resetCenter();
   else if(k==="g") toggleGallery();
-  else if(k==="escape") closeGallery();
+  else if(k==="escape"){ closeGallery(); closeHelp(); }
+  else if(k==="?"||k==="h") openHelp();
 }
 
 /* ---------- init ---------- */
@@ -531,4 +534,4 @@ function init(){
 document.addEventListener("DOMContentLoaded",init);
 
 /* expose for inline handlers */
-Object.assign(window,{randomizeParams,mutateParams,rndSeed,resetCenter,resetLimbs,clearCenters,savePresetFile,loadPresetFile,saveSlot,loadSlot,delSlot,exportPNG,previewVideo,stopPreview,exportVideo,undo,redo,openGallery,closeGallery,rerollGallery,toggleGallery,setAspect});
+Object.assign(window,{randomizeParams,mutateParams,rndSeed,resetCenter,resetLimbs,clearCenters,savePresetFile,loadPresetFile,saveSlot,loadSlot,delSlot,exportPNG,previewVideo,stopPreview,exportVideo,undo,redo,openGallery,closeGallery,rerollGallery,toggleGallery,setAspect,openHelp,closeHelp});
