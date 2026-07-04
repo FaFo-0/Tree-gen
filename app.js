@@ -24,44 +24,44 @@ function reachFn(cx,cy,ang,W,H){
 /* ---------- parameters ---------- */
 const GROUPS = [
   ["Composition", [
-    ["n_main","Main limbs",1,40,1,9],
-    ["center_radius","Center fill scatter",0,180,1,16],
-    ["center_jitter","Center irregularity",0,1.2,0.02,0.35],
-    ["limb_swirl","Limb swirl",0,0.9,0.02,0.35],
+    ["n_main","Main limbs",1,40,1,20],
+    ["center_radius","Center fill scatter",0,180,1,0],
+    ["center_jitter","Center irregularity",0,1.2,0.02,0.80],
+    ["limb_swirl","Limb swirl",0,0.9,0.02,0.66],
   ]],
   ["Limbs", [
-    ["init_width","Limb thickness",4,60,1,32],
-    ["init_length","Limb length",60,600,10,150],
-    ["taper","Taper (1=slow)",0.965,0.998,0.001,0.993],
-    ["wander","Wobble",0,0.25,0.005,0.03],
-    ["curl","Curl / S-bend",0,0.15,0.005,0.02],
+    ["init_width","Limb thickness",4,60,1,26],
+    ["init_length","Limb length",60,600,10,590],
+    ["taper","Taper (1=slow)",0.965,0.998,0.001,0.992],
+    ["wander","Wobble",0,0.25,0.005,0.205],
+    ["curl","Curl / S-bend",0,0.15,0.005,0.010],
   ]],
   ["Motion", [
-    ["radial_pull","Outward pull",0,0.06,0.002,0.026],
-    ["main_pull","Main-limb straightness",0.3,3,0.1,1.5],
+    ["radial_pull","Outward pull",0,0.06,0.002,0.052],
+    ["main_pull","Main-limb straightness",0.3,3,0.1,1.9],
     ["wind_x","Wind →",-0.8,0.8,0.02,0],
     ["wind_y","Wind ↓ (gravity)",-0.8,0.8,0.02,0],
   ]],
   ["Forks", [
-    ["fork_angle","Fork spread",0.2,1.1,0.02,0.52],
-    ["fork_angle_var","Fork variation",0,0.6,0.02,0.28],
-    ["fork_len_ratio","Fork length ratio",0.55,0.92,0.01,0.80],
-    ["fork_wid_ratio","Fork width ratio",0.55,0.95,0.01,0.82],
-    ["third_fork_prob","3-way fork chance",0,0.6,0.02,0.22],
-    ["fork_asymmetry","Limb hierarchy (tree)",0,1,0.02,0.55],
+    ["fork_angle","Fork spread",0.2,1.1,0.02,0.48],
+    ["fork_angle_var","Fork variation",0,0.6,0.02,0.44],
+    ["fork_len_ratio","Fork length ratio",0.55,0.92,0.01,0.59],
+    ["fork_wid_ratio","Fork width ratio",0.55,0.95,0.01,0.76],
+    ["third_fork_prob","3-way fork chance",0,0.6,0.02,0.38],
+    ["fork_asymmetry","Limb hierarchy (tree)",0,1,0.02,0.62],
   ]],
   ["Twigs / hairs", [
-    ["side_prob","Twig density",0,0.12,0.002,0.06],
-    ["twig_floor","Twig spawn floor",1,4,0.1,1.3],
-    ["side_angle","Twig angle",0.2,1.4,0.02,0.7],
-    ["side_wid_ratio","Twig thickness",0.3,0.85,0.02,0.42],
-    ["side_len_ratio","Twig length",0.2,0.85,0.02,0.35],
+    ["side_prob","Twig density",0,0.12,0.002,0.030],
+    ["twig_floor","Twig spawn floor",1,4,0.1,2.8],
+    ["side_angle","Twig angle",0.2,1.4,0.02,0.52],
+    ["side_wid_ratio","Twig thickness",0.3,0.85,0.02,0.58],
+    ["side_len_ratio","Twig length",0.2,0.85,0.02,0.79],
   ]],
   ["Detail / render", [
-    ["max_depth","Recursion depth",4,18,1,14],
-    ["min_width","Finest twig",0.4,2.5,0.05,1.1],
-    ["step_px","Smoothness (low=fine)",2,8,0.5,4],
-    ["blur","Softness",0,1.6,0.1,0.8],
+    ["max_depth","Recursion depth",4,18,1,15],
+    ["min_width","Finest twig",0.4,2.5,0.05,0.65],
+    ["step_px","Smoothness (low=fine)",2,8,0.5,5.5],
+    ["blur","Softness",0,1.6,0.1,0.0],
   ]],
 ];
 const SLIDERS = GROUPS.flatMap(g=>g[1]);
@@ -310,7 +310,7 @@ function fitWrap(){ const el=document.querySelector(".wrap"); el.style.aspectRat
 
 /* ---------- style presets ---------- */
 const STYLES = {
-  "Root system":{n_main:9,center_radius:16,center_jitter:0.35,limb_swirl:0.35,init_width:32,init_length:150,taper:0.993,wander:0.03,curl:0.02,radial_pull:0.026,main_pull:1.5,wind_x:0,wind_y:0,fork_angle:0.52,fork_len_ratio:0.80,fork_wid_ratio:0.82,third_fork_prob:0.22,side_prob:0.06,side_wid_ratio:0.42,side_len_ratio:0.35,symmetry:1,fork_mode:"bushy"},
+  "Root system":{n_main:20,center_radius:0,center_jitter:0.80,limb_swirl:0.66,init_width:26,init_length:590,taper:0.992,wander:0.205,curl:0.010,radial_pull:0.052,main_pull:1.9,wind_x:0,wind_y:0,fork_angle:0.48,fork_angle_var:0.44,fork_len_ratio:0.59,fork_wid_ratio:0.76,fork_asymmetry:0.62,third_fork_prob:0.38,side_prob:0.030,twig_floor:2.8,side_angle:0.52,side_wid_ratio:0.58,side_len_ratio:0.79,max_depth:15,min_width:0.65,step_px:5.5,blur:0.0,fork_mode:"bushy"},
   "Dense tree":{n_main:22,center_radius:20,center_jitter:0.6,limb_swirl:0.2,init_width:26,init_length:300,taper:0.99,wander:0.05,curl:0.03,radial_pull:0.026,main_pull:1.4,wind_x:0,wind_y:0,fork_angle:0.64,fork_len_ratio:0.74,fork_wid_ratio:0.78,third_fork_prob:0.26,side_prob:0.05,symmetry:1,fork_mode:"bushy"},
   "Rhizome":{n_main:14,center_radius:60,center_jitter:0.9,limb_swirl:0.6,init_width:22,init_length:220,taper:0.994,wander:0.06,curl:0.05,radial_pull:0.008,main_pull:0.8,wind_x:0,wind_y:0,fork_angle:0.7,fork_len_ratio:0.82,fork_wid_ratio:0.8,third_fork_prob:0.35,side_prob:0.05,symmetry:1,fork_mode:"tree",fork_asymmetry:0.4},
   "Windswept":{n_main:10,center_radius:14,center_jitter:0.3,limb_swirl:0.3,init_width:28,init_length:180,taper:0.993,wander:0.03,curl:0.02,radial_pull:0.02,main_pull:1.4,wind_x:0.35,wind_y:0.12,fork_angle:0.5,fork_len_ratio:0.8,fork_wid_ratio:0.8,third_fork_prob:0.2,side_prob:0.05,symmetry:1,fork_mode:"bushy"},
@@ -522,6 +522,8 @@ function init(){
   document.getElementById("sliders").addEventListener("change",recordHistory);  // commit param change to history
   window.addEventListener("keydown",onKey);
   window.addEventListener("resize",()=>drawHandles());
+  state.seed=Math.floor(Math.random()*1e6);         // always start on a fresh random seed
+  document.getElementById("seedval").textContent=state.seed;
   renderDisplay();
   recordHistory();                            // initial state
 }
