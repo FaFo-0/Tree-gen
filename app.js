@@ -11,7 +11,8 @@ let ASPECT = AR[1]/AR[0];                       // height/width
 let RNG = mulberry32(1);
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function uni(a,b){return a+(b-a)*RNG();}
-function gauss(mu,sig){let u=0,v=0;while(u===0)u=RNG();while(v===0)v=RNG();return mu+sig*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+// fast approx normal: sum of 3 U(-1,1) has std 1 (no log/sqrt/trig). ~bounded, good enough for aesthetic noise.
+function gauss(mu,sig){return mu+sig*((RNG()*2-1)+(RNG()*2-1)+(RNG()*2-1));}
 function pm(){return RNG()<0.5?-1:1;}          // ±1
 
 function reachFn(cx,cy,ang,W,H){
@@ -94,8 +95,9 @@ function drawBranches(ctx, W, H, growthR){
   lastCenters = [];
   // Batch segments by "color@width" so we issue ~one stroke() per width bucket
   // instead of one per segment (millions). Big speedup. Round caps still smooth.
-  const buckets = new Map(); const buds = [];
-  function seg(col,w,x0,y0,x1,y1){ const k=col+"@"+w; let a=buckets.get(k); if(!a){a=[];buckets.set(k,a);} a.push(x0,y0,x1,y1); }
+  const buckets = []; const softB = new Map(); const buds = [];   // buckets[w]=black coords; softB=gray tips
+  function seg(w,x0,y0,x1,y1){ let a=buckets[w]; if(a===undefined){a=buckets[w]=[];} a.push(x0,y0,x1,y1); }
+  function segS(c,w,x0,y0,x1,y1){ const k=c*64+w; let a=softB.get(k); if(!a){a=[];softB.set(k,a);} a.push(x0,y0,x1,y1); }
   for(let ci=0; ci<centers.length; ci++){
     const cx = centers[ci].x*W, cy = centers[ci].y*H;
     const aimsRec = [], stack = [];
@@ -121,16 +123,15 @@ function drawBranches(ctx, W, H, growthR){
       while(life>0 && wid>minw && steps<CAP){
         ang += curl + gauss(0,P.wander);
         const desired = Math.atan2(y-cy,x-cx);
-        // signed smallest angle from ang to desired, in [-π,π]. MUST use atan2(sin,cos):
-        // JS "%" keeps the sign of the dividend, so (a % 2π)-π is wrong for negatives
-        // (Python's floored "%" doesn't) — that mismatch was biasing growth one direction.
-        const diff = Math.atan2(Math.sin(desired-ang), Math.cos(desired-ang));
+        // signed smallest angle to desired, wrapped to [-π,π) with a cheap subtraction
+        // (no trig). Floored-mod equivalent — correct for negatives, unlike JS "%".
+        let diff = desired-ang; diff -= 6.283185307179586*Math.floor((diff+Math.PI)*0.15915494309189535);
         ang += P.radial_pull*diff*(isMain?P.main_pull:0.5);
         const nx = x+(Math.cos(ang)+wx)*step, ny = y+(Math.sin(ang)+wy)*step;
         if(growthR===Infinity || Math.hypot(nx-cx,ny-cy)<=growthR){
-          let col = "#000";
-          if(soft && wid<1.8*sc){ const c=Math.round(75*(1-wid/(1.8*sc))/8)*8; col=`rgb(${c},${c},${c})`; }
-          seg(col, Math.max(1,Math.round(wid)), x,y,nx,ny);
+          const w = Math.max(1,Math.round(wid));
+          if(soft && wid<1.8*sc){ const c=Math.round(75*(1-wid/(1.8*sc))/8)*8; segS(c,w,x,y,nx,ny); }
+          else seg(w,x,y,nx,ny);
         }
         x=nx; y=ny; wid*=P.taper; life-=step; steps++;
         if(RNG()<P.side_prob && wid>P.twig_floor*minw){
@@ -161,9 +162,17 @@ function drawBranches(ctx, W, H, growthR){
   // flush buckets — one stroke per width
   ctx.lineCap = state.round_joints?"round":"butt";
   ctx.lineJoin = state.round_joints?"round":"miter";
-  for(const [k,arr] of buckets){
-    const at=k.indexOf("@");
-    ctx.strokeStyle = k.slice(0,at); ctx.lineWidth = +k.slice(at+1);
+  ctx.strokeStyle = "#000";
+  for(let w=0;w<buckets.length;w++){
+    const arr=buckets[w]; if(arr===undefined) continue;
+    ctx.lineWidth = w||1;
+    ctx.beginPath();
+    for(let i=0;i<arr.length;i+=4){ ctx.moveTo(arr[i],arr[i+1]); ctx.lineTo(arr[i+2],arr[i+3]); }
+    ctx.stroke();
+  }
+  for(const [k,arr] of softB){
+    const w=k&63, c=k>>6;
+    ctx.strokeStyle=`rgb(${c},${c},${c})`; ctx.lineWidth=w||1;
     ctx.beginPath();
     for(let i=0;i<arr.length;i+=4){ ctx.moveTo(arr[i],arr[i+1]); ctx.lineTo(arr[i+2],arr[i+3]); }
     ctx.stroke();
