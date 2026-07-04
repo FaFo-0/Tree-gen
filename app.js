@@ -375,8 +375,17 @@ function exportPNG(which){
   },30);
 }
 
-/* ---------- video (webm via MediaRecorder) + live preview ---------- */
+/* ---------- video ---------- */
 let previewRAF=null, previewStop=false, previewSavedP=null;
+function videoSettings(){                            // seconds × fps -> frames; resolution + aspect -> W×H
+  const fps=clampInt("vfps",1,60);
+  const secs=Math.max(0.5,Math.min(120,+document.getElementById("vsecs").value||6));
+  const frames=Math.max(2,Math.min(6000,Math.round(secs*fps)));
+  let H=(+document.getElementById("vres").value||1080); H-=H%2;
+  let W=Math.round(H*AR[0]/AR[1]); W-=W%2;
+  return {frames,fps,W,H,secs};
+}
+function updateVInfo(){ const v=videoSettings(); const el=document.getElementById("vinfo"); if(el) el.textContent=`≈ ${v.frames} frames · ${v.W}×${v.H}px.`; }
 function frameParams(i,frames,mode,randomize){
   if(mode==="growth"){ return {growth: frames<2?1:i/(frames-1)}; }
   if(mode==="mutate"){                         // evolve: nudge unlocked params each frame, seed fixed
@@ -396,7 +405,7 @@ function frameParams(i,frames,mode,randomize){
 }
 async function previewVideo(){
   stopPreview();
-  const frames=clampInt("vframes",2,600), fps=clampInt("vfps",1,60), mode=document.getElementById("vmode").value, randomize=document.getElementById("vrand").checked;
+  const {frames,fps}=videoSettings(); const mode=document.getElementById("vmode").value, randomize=document.getElementById("vrand").checked;
   state._base=state.seed; previewSavedP={...P}; previewStop=false;
   let i=0;
   const tick=()=>{
@@ -414,9 +423,8 @@ async function exportVideo(){
   // Frames are rendered offline and encoded with FIXED timestamps (i/fps), so slow
   // (dense) frames never cause stutter — encoding is decoupled from generation.
   stopPreview();
-  const frames=clampInt("vframes",2,600), fps=clampInt("vfps",1,60), mode=document.getElementById("vmode").value, randomize=document.getElementById("vrand").checked;
-  const vw=Math.max(200,Math.min(4000,+document.getElementById("vw").value||1000));
-  const W=vw-(vw%2), H=Math.round(W*ASPECT)-(Math.round(W*ASPECT)%2);
+  const mode=document.getElementById("vmode").value, randomize=document.getElementById("vrand").checked;
+  const {frames,fps,W,H}=videoSettings();
   const rc=document.createElement("canvas"); rc.width=W; rc.height=H; const rctx=rc.getContext("2d",{alpha:false});
   const savedP={...P}, savedSeed=state.seed; state._base=state.seed;
   const bitrate=Math.min(40e6, Math.round(W*H*fps*0.18));
@@ -563,7 +571,9 @@ function init(){
   tm.addEventListener("change",()=>{ state.fork_mode=tm.checked?"tree":"bushy"; scheduleRender(); recordHistory(); });
   document.getElementById("breeze").addEventListener("change",e=>toggleBreeze(e.target.checked));
   document.getElementById("buds").addEventListener("change",e=>{ state.buds=e.target.checked; scheduleRender(); recordHistory(); });
-  const asp=document.getElementById("aspect"); asp.addEventListener("change",()=>{ const [w,h]=asp.value.split(",").map(Number); setAspect(w,h); recordHistory(); });
+  const asp=document.getElementById("aspect"); asp.addEventListener("change",()=>{ const [w,h]=asp.value.split(",").map(Number); setAspect(w,h); updateVInfo(); recordHistory(); });
+  ["vsecs","vfps","vres"].forEach(id=>document.getElementById(id).addEventListener("input",updateVInfo));
+  updateVInfo();
   fitWrap();
   // style buttons
   const sb=document.getElementById("styles");
