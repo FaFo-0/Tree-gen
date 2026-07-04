@@ -16,14 +16,12 @@ python3 -m http.server 5178      # then open http://localhost:5178
 
 ## Features
 - **Recursive branch engine** — bushy (dense Y-forks) or tree (monopodial, bold-limb hierarchy).
-- **Movable center** — click the canvas to place the convergence point (corners/edges too).
+- **Direct editing (invisible)** — with **✋ Edit** on: grab the center (click on it) to move it, grab a limb (click on it) to aim it. No handles drawn — you manipulate the real thing. Turn Edit off to re-center and place limbs purely by the seed.
 - **Multiple centers** — shift-click to add convergence points → forests / rhizome networks.
-- **Draggable main-limb handles** — drag the dots to aim each main limb.
 - **Wind / gravity** — directional bias for windswept trees or hanging roots.
 - **Breeze** — live wind animation (branches sway).
-- **Radial symmetry + mirror** — kaleidoscopic mandalas.
 - **Buds at tips** — dots at branch ends for a blossom/node look.
-- **Style presets** — Root system, Dense tree, Rhizome, Windswept, Mandala, Neuron.
+- **Style presets** — Root system, Dense tree, Rhizome, Windswept, Neuron.
 - **~29 live parameters**, each with a 🔒 lock.
 - **Randomize** (skips locked) and **Mutate** (nudge unlocked params to explore nearby variations).
 - **Seed gallery** — 12-thumbnail contact sheet; click one to load it.
@@ -38,7 +36,7 @@ Everything runs locally in your browser — nothing is uploaded.
 ## Keyboard shortcuts
 `R` randomize · `M` mutate · `S` random seed · `C` reset center · `G` gallery ·
 `Ctrl+Z` undo · `Ctrl+Shift+Z` redo · `H` / `?` help · `Esc` close overlays.
-Click = move center · Shift-click = add center · drag a dot = aim a limb.
+Grab the center to move it · grab a limb to aim it · Shift-click = add center (needs ✋ Edit on).
 
 ## Deploy to Vercel
 1. Push this repo to GitHub (already done if you used the provided setup).

@@ -47,7 +47,6 @@
  .wrap{position:relative;width:min(100%,calc((100vh - 90px) * 1.5556));aspect-ratio:140/90;box-shadow:0 10px 60px #000;background:
    conic-gradient(#c9c9c9 90deg,#fff 0 180deg,#c9c9c9 0 270deg,#fff 0) 0 0/28px 28px}
  #c,#ov{position:absolute;inset:0;width:100%;height:100%}
- #ov{cursor:crosshair}
  #status{color:var(--dim);font-size:12px;min-height:16px}
  .hint{position:absolute;top:8px;left:12px;color:var(--dim);font-size:11px;background:rgba(0,0,0,.35);padding:3px 8px;border-radius:5px;pointer-events:none}
  /* gallery modal */
@@ -102,8 +101,8 @@
   </div>
 
   <div class=chk><input type=checkbox id=tree_mode><label for=tree_mode>Tree forks (off = Bushy / denser)</label></div>
+  <div class=chk><input type=checkbox id=edit_mode checked><label for=edit_mode>✋ Edit — move center / limbs by grabbing them (off = reset to seed)</label></div>
   <div class=chk><input type=checkbox id=round_joints checked><label for=round_joints>Round joints (smooth)</label></div>
-  <div class=chk><input type=checkbox id=mirror><label for=mirror>Mirror (with symmetry)</label></div>
   <div class=chk><input type=checkbox id=soft_tips><label for=soft_tips>Soft gray tips</label></div>
   <div class=chk><input type=checkbox id=breeze><label for=breeze>🍃 Breeze (animate wind live)</label></div>
   <div class=chk><input type=checkbox id=buds><label for=buds>🌸 Buds at tips</label></div>
@@ -166,7 +165,7 @@
   <div class=wrap>
     <canvas id=c></canvas>
     <canvas id=ov></canvas>
-    <div class=hint>click = move center · drag a dot = aim a limb</div>
+    <div class=hint>grab the center to move it · grab a limb to aim it · shift-click = add center</div>
   </div>
   <div id=status>…</div>
 </div>
@@ -174,16 +173,16 @@
 <div id=help class=modal>
   <div class=modal-h><b>Help &amp; shortcuts</b><span><button class=alt onclick="closeHelp()">✕ close</button></span></div>
   <div class=body>
-    <p><b>Canvas</b><br>
-      • <b>Click</b> the canvas to move the center.<br>
-      • <b>Shift-click</b> to add another center (forests / rhizome networks); <kbd>✕ multi</kbd> clears extras.<br>
-      • <b>Drag a green/blue dot</b> to aim a main limb (single-center only). <kbd>↺ Limbs</kbd> resets aims.</p>
+    <p><b>Canvas editing</b> (needs ✋ Edit on — nothing is drawn on top, you grab the real thing)<br>
+      • <b>Grab the center</b> (click on it) and drag to move it.<br>
+      • <b>Grab a limb</b> (click on it) and drag to aim it.<br>
+      • <b>Shift-click</b> adds another center (forests / rhizome networks); <kbd>✕ multi</kbd> clears extras.<br>
+      • Turn <b>✋ Edit off</b> to re-center and place limbs purely by the seed.</p>
     <p><b>Shortcuts</b><br>
       <kbd>R</kbd> randomize params · <kbd>M</kbd> mutate (nudge) · <kbd>S</kbd> random seed · <kbd>C</kbd> reset center · <kbd>G</kbd> gallery · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redo · <kbd>Esc</kbd> close</p>
     <p><b>Ideas</b><br>
       • Lock 🔒 the params you like, then Randomize / Mutate to explore the rest.<br>
-      • <b>Styles</b>: Root system, Dense tree, Rhizome, Windswept, Mandala, Neuron.<br>
-      • <b>Mandala</b> uses radial symmetry — combine with Mirror.<br>
+      • <b>Styles</b>: Root system, Dense tree, Rhizome, Windswept, Neuron.<br>
       • <b>Breeze</b> animates the wind live; <b>Wind ↓</b> = gravity for hanging roots.<br>
       • <b>Gallery</b> shows 12 seeds — click one to load it.<br>
       • Export a huge PNG for print, or a WebM seed-sweep / growth video.</p>

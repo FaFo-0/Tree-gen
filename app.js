@@ -57,9 +57,6 @@ const GROUPS = [
     ["side_wid_ratio","Twig thickness",0.3,0.85,0.02,0.42],
     ["side_len_ratio","Twig length",0.2,0.85,0.02,0.35],
   ]],
-  ["Symmetry", [
-    ["symmetry","Radial repeat",1,12,1,1],
-  ]],
   ["Detail / render", [
     ["max_depth","Recursion depth",4,18,1,14],
     ["min_width","Finest twig",0.4,2.5,0.05,1.1],
@@ -76,7 +73,7 @@ const P = {};                                  // current param values
 SLIDERS.forEach(s=>P[s[0]]=s[5]);
 let state = {
   seed:8, center_x:0.5, center_y:0.5, extra:[],
-  fork_mode:"bushy", round_joints:true, soft_tips:false, mirror:false, white_bg:true, buds:false,
+  fork_mode:"bushy", round_joints:true, soft_tips:false, white_bg:true, buds:false, editMode:true,
 };
 const locked = new Set();
 let limbAims = [];                              // per-main-limb aim override (radians) or undefined (primary center only)
@@ -89,14 +86,16 @@ function drawBranches(ctx, W, H, growthR){
   const sc = W/2000;
   const step = P.step_px*sc, minw = P.min_width*sc;
   const bushy = state.fork_mode==="bushy";
-  ctx.lineCap = state.round_joints?"round":"butt";
-  ctx.lineJoin = state.round_joints?"round":"miter";
-  ctx.strokeStyle = "#000";
   let steps = 0;
   const n = P.n_main|0, diag = Math.hypot(W,H);
   const centers = centersList(), single = centers.length===1;
   const wx = P.wind_x, wy = P.wind_y;
+  const soft = state.soft_tips;
   lastCenters = [];
+  // Batch segments by "color@width" so we issue ~one stroke() per width bucket
+  // instead of one per segment (millions). Big speedup. Round caps still smooth.
+  const buckets = new Map(); const buds = [];
+  function seg(col,w,x0,y0,x1,y1){ const k=col+"@"+w; let a=buckets.get(k); if(!a){a=[];buckets.set(k,a);} a.push(x0,y0,x1,y1); }
   for(let ci=0; ci<centers.length; ci++){
     const cx = centers[ci].x*W, cy = centers[ci].y*H;
     const aimsRec = [], stack = [];
@@ -127,10 +126,8 @@ function drawBranches(ctx, W, H, growthR){
         const nx = x+(Math.cos(ang)+wx)*step, ny = y+(Math.sin(ang)+wy)*step;
         if(growthR===Infinity || Math.hypot(nx-cx,ny-cy)<=growthR){
           let col = "#000";
-          if(state.soft_tips && wid<1.8*sc){ const c=Math.round(75*(1-wid/(1.8*sc))); col=`rgb(${c},${c},${c})`; }
-          ctx.strokeStyle = col;
-          ctx.lineWidth = Math.max(1,wid);
-          ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(nx,ny); ctx.stroke();
+          if(soft && wid<1.8*sc){ const c=Math.round(75*(1-wid/(1.8*sc))/8)*8; col=`rgb(${c},${c},${c})`; }
+          seg(col, Math.max(1,Math.round(wid)), x,y,nx,ny);
         }
         x=nx; y=ny; wid*=P.taper; life-=step; steps++;
         if(RNG()<P.side_prob && wid>P.twig_floor*minw){
@@ -139,9 +136,7 @@ function drawBranches(ctx, W, H, growthR){
         }
       }
       if(!(depth<P.max_depth && wid>minw)){
-        if(state.buds && (growthR===Infinity || Math.hypot(x-cx,y-cy)<=growthR)){
-          ctx.fillStyle="#000"; ctx.beginPath(); ctx.arc(x,y,Math.max(1.3,2.4*sc),0,7); ctx.fill();
-        }
+        if(state.buds && (growthR===Infinity || Math.hypot(x-cx,y-cy)<=growthR)) buds.push(x,y);
       } else {
         const sp = P.fork_angle+uni(0,P.fork_angle_var);
         const base_len = seglen*P.fork_len_ratio, ew = wid;
@@ -160,6 +155,17 @@ function drawBranches(ctx, W, H, growthR){
       }
     }
   }
+  // flush buckets — one stroke per width
+  ctx.lineCap = state.round_joints?"round":"butt";
+  ctx.lineJoin = state.round_joints?"round":"miter";
+  for(const [k,arr] of buckets){
+    const at=k.indexOf("@");
+    ctx.strokeStyle = k.slice(0,at); ctx.lineWidth = +k.slice(at+1);
+    ctx.beginPath();
+    for(let i=0;i<arr.length;i+=4){ ctx.moveTo(arr[i],arr[i+1]); ctx.lineTo(arr[i+2],arr[i+3]); }
+    ctx.stroke();
+  }
+  if(buds.length){ ctx.fillStyle="#000"; const br=Math.max(1.3,2.4*sc); for(let i=0;i<buds.length;i+=2){ ctx.beginPath(); ctx.arc(buds[i],buds[i+1],br,0,7); ctx.fill(); } }
 }
 
 /* ---------- scene: background + symmetry composite + blur ---------- */
@@ -178,18 +184,8 @@ function renderScene(ctx, W, H, opts){
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,W,H);
   if(!transparent){ ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H); }
-  const k = Math.max(1,P.symmetry|0);
-  const cx = W*state.center_x, cy = H*state.center_y;
-  ctx.save();
   if(P.blur>0) ctx.filter = `blur(${(P.blur*(W/2000)).toFixed(2)}px)`;
-  for(let j=0;j<k;j++){
-    ctx.save();
-    ctx.translate(cx,cy); ctx.rotate(2*Math.PI*j/k); ctx.translate(-cx,-cy);
-    ctx.drawImage(layer,0,0);
-    if(state.mirror){ ctx.translate(cx,cy); ctx.scale(1,-1); ctx.translate(-cx,-cy); ctx.drawImage(layer,0,0); }
-    ctx.restore();
-  }
-  ctx.restore();
+  ctx.drawImage(layer,0,0);
   ctx.filter = "none";
 }
 
@@ -210,49 +206,43 @@ function renderDisplay(){
 
 /* ---------- main-limb handles overlay ---------- */
 function sizeOverlay(){ const r=cvs.getBoundingClientRect(); ov.width=Math.max(1,Math.round(r.width)); ov.height=Math.max(1,Math.round(r.height)); }
-let handlePts=[], centerPts=[];
-function drawHandles(){
-  sizeOverlay();
-  const octx=ov.getContext("2d"); octx.clearRect(0,0,ov.width,ov.height);
-  const R=Math.min(ov.width,ov.height)*0.14;
-  handlePts=[]; centerPts=[];
-  const single=lastCenters.length===1;
-  lastCenters.forEach((C,ci)=>{
-    const cxD=C.x*ov.width, cyD=C.y*ov.height;
-    centerPts.push({x:cxD,y:cyD,ci});
-    octx.strokeStyle="rgba(90,180,255,.9)"; octx.lineWidth=1.5;
-    octx.beginPath(); octx.arc(cxD,cyD,6,0,7); octx.stroke();
-    octx.beginPath(); octx.moveTo(cxD-9,cyD); octx.lineTo(cxD+9,cyD); octx.moveTo(cxD,cyD-9); octx.lineTo(cxD,cyD+9); octx.stroke();
-    if(single){
-      C.aims.forEach((a,li)=>{
-        const hx=cxD+Math.cos(a)*R, hy=cyD+Math.sin(a)*R;
-        handlePts.push({x:hx,y:hy,li});
-        octx.strokeStyle="rgba(120,200,120,.55)"; octx.lineWidth=1;
-        octx.beginPath(); octx.moveTo(cxD,cyD); octx.lineTo(hx,hy); octx.stroke();
-        octx.fillStyle= limbAims[li]!=null?"#ffcf3f":"#6cf";
-        octx.beginPath(); octx.arc(hx,hy,5,0,7); octx.fill();
-      });
-    }
-  });
-}
-/* interactions: click=move nearest center · shift-click=add center · drag dot=aim limb */
-let drag=null;
+function drawHandles(){ sizeOverlay(); ov.getContext("2d").clearRect(0,0,ov.width,ov.height); }  // invisible: overlay only captures clicks
+/* interactions: grab the CENTER by clicking on it; grab a LIMB by clicking on it. No visible UI.
+   shift-click adds a center. All disabled when Edit is off. */
+let drag=null, hovering=false;
 function ovPos(e){ const r=ov.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top, r}; }
 function setCenter(ci,fx,fy){ fx=Math.min(1,Math.max(0,fx)); fy=Math.min(1,Math.max(0,fy)); if(ci===0){state.center_x=fx;state.center_y=fy;} else {state.extra[ci-1]={x:fx,y:fy};} }
+function pick(p){ // returns {type:'center',ci} | {type:'limb',li} | null
+  const list=centersList();
+  let ci=-1,bd=1e9; list.forEach((C,idx)=>{const d=Math.hypot(C.x*p.r.width-p.x,C.y*p.r.height-p.y); if(d<bd){bd=d;ci=idx;}});
+  if(bd<24) return {type:"center",ci};
+  if(list.length===1 && lastCenters[0]){
+    const C=lastCenters[0], cxD=C.x*p.r.width, cyD=C.y*p.r.height;
+    const dist=Math.hypot(p.x-cxD,p.y-cyD);
+    if(dist>18){ const ca=Math.atan2(p.y-cyD,p.x-cxD); let li=-1,ba=0.22;
+      C.aims.forEach((a,idx)=>{ const da=Math.abs(((ca-a+Math.PI)%(2*Math.PI))-Math.PI); if(da<ba){ba=da;li=idx;} });
+      if(li>=0) return {type:"limb",li};
+    }
+  }
+  return null;
+}
 ov.addEventListener("mousedown",e=>{
+  if(!state.editMode) return;
   const p=ovPos(e);
-  if(!e.shiftKey){ let hit=null,best=18; for(const h of handlePts){const d=Math.hypot(h.x-p.x,h.y-p.y);if(d<best){best=d;hit=h;}} if(hit){drag={type:"limb",li:hit.li};return;} }
   if(e.shiftKey){ state.extra.push({x:p.x/p.r.width,y:p.y/p.r.height}); drag={type:"center",ci:state.extra.length}; scheduleRender(); return; }
-  let ci=0,bd=1e9; centerPts.forEach(c=>{const d=Math.hypot(c.x-p.x,c.y-p.y); if(d<bd){bd=d;ci=c.ci;}});
-  drag={type:"center",ci}; setCenter(ci,p.x/p.r.width,p.y/p.r.height); scheduleRender();
+  const hit=pick(p); if(hit) drag=hit;   // only act if you actually grabbed something
 });
 window.addEventListener("mousemove",e=>{
-  if(!drag) return; const p=ovPos(e);
+  if(!state.editMode){ ov.style.cursor="default"; return; }
+  const p=ovPos(e);
+  if(!drag){ ov.style.cursor = pick(p)?"grab":"default"; return; }
+  ov.style.cursor="grabbing";
   if(drag.type==="limb"){ const C=centersList()[0]; const cxD=C.x*p.r.width, cyD=C.y*p.r.height; limbAims[drag.li]=Math.atan2(p.y-cyD,p.x-cxD); scheduleRender(); }
   else { setCenter(drag.ci, p.x/p.r.width, p.y/p.r.height); scheduleRender(); }
 });
 window.addEventListener("mouseup",()=>{ if(drag){drag=null; recordHistory();} });
 function clearCenters(){ state.extra=[]; scheduleRender(); recordHistory(); }
+function setEditMode(on){ state.editMode=on; if(!on){ state.center_x=0.5; state.center_y=0.5; state.extra=[]; limbAims=[]; scheduleRender(); recordHistory(); } else scheduleRender(); }
 
 /* ---------- UI build ---------- */
 const panel=document.getElementById("sliders");
@@ -321,7 +311,6 @@ const STYLES = {
   "Dense tree":{n_main:22,center_radius:20,center_jitter:0.6,limb_swirl:0.2,init_width:26,init_length:300,taper:0.99,wander:0.05,curl:0.03,radial_pull:0.026,main_pull:1.4,wind_x:0,wind_y:0,fork_angle:0.64,fork_len_ratio:0.74,fork_wid_ratio:0.78,third_fork_prob:0.26,side_prob:0.05,symmetry:1,fork_mode:"bushy"},
   "Rhizome":{n_main:14,center_radius:60,center_jitter:0.9,limb_swirl:0.6,init_width:22,init_length:220,taper:0.994,wander:0.06,curl:0.05,radial_pull:0.008,main_pull:0.8,wind_x:0,wind_y:0,fork_angle:0.7,fork_len_ratio:0.82,fork_wid_ratio:0.8,third_fork_prob:0.35,side_prob:0.05,symmetry:1,fork_mode:"tree",fork_asymmetry:0.4},
   "Windswept":{n_main:10,center_radius:14,center_jitter:0.3,limb_swirl:0.3,init_width:28,init_length:180,taper:0.993,wander:0.03,curl:0.02,radial_pull:0.02,main_pull:1.4,wind_x:0.35,wind_y:0.12,fork_angle:0.5,fork_len_ratio:0.8,fork_wid_ratio:0.8,third_fork_prob:0.2,side_prob:0.05,symmetry:1,fork_mode:"bushy"},
-  "Mandala":{n_main:6,center_radius:10,center_jitter:0.1,limb_swirl:0.15,init_width:24,init_length:170,taper:0.993,wander:0.025,curl:0.03,radial_pull:0.024,main_pull:1.6,wind_x:0,wind_y:0,fork_angle:0.55,fork_len_ratio:0.8,fork_wid_ratio:0.82,third_fork_prob:0.22,side_prob:0.05,symmetry:6,fork_mode:"bushy"},
   "Neuron":{n_main:16,center_radius:24,center_jitter:0.7,limb_swirl:0.5,init_width:16,init_length:160,taper:0.992,wander:0.09,curl:0.06,radial_pull:0.012,main_pull:1.0,wind_x:0,wind_y:0,fork_angle:0.6,fork_len_ratio:0.78,fork_wid_ratio:0.7,third_fork_prob:0.3,side_prob:0.05,symmetry:1,fork_mode:"tree",fork_asymmetry:0.7},
 };
 function applyStyle(name){
@@ -342,9 +331,9 @@ function applySnapshot(o){
   document.getElementById("tree_mode").checked=(state.fork_mode==="tree");
   document.getElementById("round_joints").checked=state.round_joints;
   document.getElementById("soft_tips").checked=state.soft_tips;
-  document.getElementById("mirror").checked=state.mirror;
   document.getElementById("white_bg").checked=state.white_bg;
   document.getElementById("buds").checked=!!state.buds;
+  document.getElementById("edit_mode").checked=state.editMode!==false;
   if(o.ar){ document.getElementById("aspect").value=o.ar.join(","); setAspect(o.ar[0],o.ar[1]); }
   limbAims=[]; scheduleRender(); recordHistory();
 }
@@ -513,8 +502,9 @@ function init(){
   document.getElementById("seedval").textContent=state.seed;
   bindToggle("round_joints","round_joints");
   bindToggle("soft_tips","soft_tips");
-  bindToggle("mirror","mirror");
   bindToggle("white_bg","white_bg");
+  const em=document.getElementById("edit_mode"); em.checked=state.editMode;
+  em.addEventListener("change",()=>setEditMode(em.checked));
   const tm=document.getElementById("tree_mode"); tm.checked=false;
   tm.addEventListener("change",()=>{ state.fork_mode=tm.checked?"tree":"bushy"; scheduleRender(); recordHistory(); });
   document.getElementById("breeze").addEventListener("change",e=>toggleBreeze(e.target.checked));
@@ -534,4 +524,4 @@ function init(){
 document.addEventListener("DOMContentLoaded",init);
 
 /* expose for inline handlers */
-Object.assign(window,{randomizeParams,mutateParams,rndSeed,resetCenter,resetLimbs,clearCenters,savePresetFile,loadPresetFile,saveSlot,loadSlot,delSlot,exportPNG,previewVideo,stopPreview,exportVideo,undo,redo,openGallery,closeGallery,rerollGallery,toggleGallery,setAspect,openHelp,closeHelp});
+Object.assign(window,{randomizeParams,mutateParams,rndSeed,resetCenter,resetLimbs,clearCenters,savePresetFile,loadPresetFile,saveSlot,loadSlot,delSlot,exportPNG,previewVideo,stopPreview,exportVideo,undo,redo,openGallery,closeGallery,rerollGallery,toggleGallery,setAspect,openHelp,closeHelp,setEditMode});
