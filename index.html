@@ -48,6 +48,20 @@
    conic-gradient(#c9c9c9 90deg,#fff 0 180deg,#c9c9c9 0 270deg,#fff 0) 0 0/28px 28px}
  #c,#ov{position:absolute;inset:0;width:100%;height:100%}
  #status{color:var(--dim);font-size:12px;min-height:16px}
+ /* timeline */
+ #tlpanel{width:min(100%,calc((100vh - 90px) * 1.5556))}
+ .tlrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+ .tlrow button{flex:0 0 auto;padding:6px 10px;font-size:12px}
+ .tlrow select{padding:5px}
+ .tlf{display:flex;align-items:center;gap:4px;color:var(--dim);font-size:11px}
+ .tlf input{width:58px;background:var(--panel2);color:#fff;border:1px solid var(--line);border-radius:5px;padding:4px}
+ #tlinfo{color:var(--dim);font-size:11px;margin-left:auto}
+ #tlbar{position:relative;height:36px;background:var(--panel);border:1px solid var(--line);border-radius:7px;cursor:pointer;overflow:hidden}
+ #tlph{position:absolute;top:0;bottom:0;width:2px;background:#f66;pointer-events:none}
+ .kd{position:absolute;top:50%;width:11px;height:11px;transform:translate(-50%,-50%) rotate(45deg);background:#6cf;cursor:grab;border-radius:2px}
+ .kd.sel{background:#ffcf3f}
+ .kd.cut{outline:2px solid #f66}
+ .beat{position:absolute;top:0;bottom:0;width:1px;background:#26262c;pointer-events:none}
  .hint{position:absolute;top:8px;left:12px;color:var(--dim);font-size:11px;background:rgba(0,0,0,.35);padding:3px 8px;border-radius:5px;pointer-events:none}
  /* gallery modal */
  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:20;padding:22px;flex-direction:column;gap:14px}
@@ -145,7 +159,7 @@
   <hr>
   <div class=grp>Video (seed sweep / growth)</div>
   <div class=btns style="gap:7px">
-    <div class=field>Mode<select id=vmode><option value=seed>seed sweep</option><option value=mutate>mutate (evolve)</option><option value=growth>growth</option></select></div>
+    <div class=field>Mode<select id=vmode><option value=timeline selected>timeline (keyframes)</option><option value=seed>seed sweep</option><option value=mutate>mutate (evolve)</option><option value=growth>growth</option></select></div>
     <div class=field>Seconds<input type=number id=vsecs value=6 min=0.5 max=120 step=0.5></div>
   </div>
   <div class=btns style="gap:7px">
@@ -169,6 +183,21 @@
     <canvas id=c></canvas>
     <canvas id=ov></canvas>
     <div class=hint>grab the center to move it · grab a limb to aim it · shift-click = add center</div>
+  </div>
+  <div id=tlpanel>
+    <div class=tlrow>
+      <button onclick="tlAdd()">◆ Keyframe</button>
+      <button class=alt onclick="tlUpdate()">update</button>
+      <button class=alt onclick="tlDel()">delete</button>
+      <select id=tlease onchange="tlEditSel()" title="easing into the NEXT keyframe">
+        <option value=smooth>smooth</option><option value=linear>linear</option><option value=hold>hold (cut)</option>
+      </select>
+      <label class=tlf>grow%<input id=tlgrow type=number min=0 max=100 value=100 onchange="tlEditSel()"></label>
+      <button class=alt id=tlseedbtn onclick="tlSeedCut()">seed cut: off</button>
+      <label class=tlf>BPM<input id=tlbpm type=number min=0 max=300 value=0 step=0.5 onchange="tlDraw()"></label>
+      <span id=tlinfo></span>
+    </div>
+    <div id=tlbar><div id=tlph></div></div>
   </div>
   <div id=status>…</div>
 </div>

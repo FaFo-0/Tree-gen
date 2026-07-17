@@ -211,7 +211,7 @@ let renderTimer=null;
 function scheduleRender(){ if(renderTimer)cancelAnimationFrame(renderTimer); renderTimer=requestAnimationFrame(renderDisplay); }
 function renderDisplay(){
   const t0=performance.now();
-  renderScene(cctx,PW,PH,{transparent:!state.white_bg});
+  renderScene(cctx,PW,PH,{transparent:!state.white_bg, growth:(typeof tlG==="number"?tlG:1)});
   drawHandles();
   setStatus(`rendered ${Math.round(performance.now()-t0)} ms · seed ${state.seed}`);
 }
@@ -332,7 +332,7 @@ function applyStyle(name){
 }
 
 /* ---------- presets (localStorage + file) ---------- */
-function snapshot(){ return {params:{...P}, state:{...state}, locked:[...locked], center:{x:state.center_x,y:state.center_y}, ar:[...AR]}; }
+function snapshot(){ return {params:{...P}, state:{...state}, locked:[...locked], center:{x:state.center_x,y:state.center_y}, ar:[...AR], tl:{keys:TL.keys.map(k=>({...k,params:{...k.params},center:{...k.center}})), baseSeed:TL.baseSeed}}; }
 function applySnapshot(o){
   if(o.params) for(const k in o.params){ if(k in P){P[k]=o.params[k];} }
   if(o.state) Object.assign(state,o.state);
@@ -347,6 +347,7 @@ function applySnapshot(o){
   document.getElementById("buds").checked=!!state.buds;
   document.getElementById("edit_mode").checked=state.editMode!==false;
   if(o.ar){ document.getElementById("aspect").value=o.ar.join(","); setAspect(o.ar[0],o.ar[1]); }
+  if(o.tl){ TL={keys:(o.tl.keys||[]).map(k=>({...k})), baseSeed:o.tl.baseSeed??null}; tlSel=-1; tlDraw(); }
   limbAims=[]; scheduleRender(); recordHistory();
 }
 function savePresetFile(){
@@ -375,6 +376,72 @@ function exportPNG(which){
   },30);
 }
 
+/* ---------- keyframe timeline ----------
+   key = {t, params:{...P}, center:{x,y}, growth:0..1, ease:"smooth"|"linear"|"hold", seed:null|int}
+   Deterministic: scrubbed frame == exported frame. Base seed = TL.baseSeed;
+   a key with seed!=null hard-cuts the seed from its time onward. */
+let TL={keys:[], baseSeed:null};
+let tlT=0, tlSel=-1, tlG=1;
+function tlDur(){ return videoSettings().secs; }
+function easeF(k,u){ return k==="hold"?0 : k==="linear"?u : u*u*(3-2*u); }
+function tlSnap(t){ const bpm=+document.getElementById("tlbpm").value||0; if(bpm>0){ const b=60/bpm; t=Math.round(t/b)*b; } return Math.max(0,Math.min(tlDur(),t)); }
+function tlApply(t){
+  if(!TL.keys.length){ tlG=1; return 1; }
+  const ks=TL.keys;
+  let seed=TL.baseSeed??state.seed;
+  for(const k of ks) if(k.seed!=null && k.t<=t) seed=k.seed;
+  state.seed=seed; document.getElementById("seedval").textContent=seed;
+  let a=ks[0], b=ks[0];
+  for(const k of ks){ if(k.t<=t){a=k;} } for(let i=ks.length-1;i>=0;i--){ if(ks[i].t>=t){b=ks[i];} }
+  let u = (b.t>a.t) ? easeF(a.ease,(t-a.t)/(b.t-a.t)) : 0;
+  if(t<=ks[0].t){a=b=ks[0];u=0;} if(t>=ks[ks.length-1].t){a=b=ks[ks.length-1];u=0;}
+  for(const s of SLIDERS){ const k=s[0]; const va=a.params[k], vb=b.params[k];
+    if(va==null||vb==null) continue;
+    let v=va+(vb-va)*u; P[k]=INT_KEYS.has(k)?Math.round(v):+v.toFixed(decimals(s[4])); showVal(k); }
+  state.center_x=a.center.x+(b.center.x-a.center.x)*u;
+  state.center_y=a.center.y+(b.center.y-a.center.y)*u;
+  tlG=(a.growth??1)+((b.growth??1)-(a.growth??1))*u;
+  return tlG;
+}
+function tlSeek(t){ tlT=tlSnap(t); tlApply(tlT); tlDraw(); scheduleRender(); }
+function tlAdd(){
+  if(TL.baseSeed==null) TL.baseSeed=state.seed;
+  const k={t:tlT, params:{...P}, center:{x:state.center_x,y:state.center_y}, growth:(+document.getElementById("tlgrow").value||100)/100, ease:document.getElementById("tlease").value, seed:null};
+  const ex=TL.keys.findIndex(x=>Math.abs(x.t-k.t)<1e-6);
+  if(ex>=0) TL.keys[ex]=k; else TL.keys.push(k);
+  TL.keys.sort((x,y)=>x.t-y.t);
+  tlSel=TL.keys.findIndex(x=>x===k); tlDraw(); setStatus(`keyframe @ ${k.t.toFixed(2)}s (${TL.keys.length} total)`); recordHistory();
+}
+function tlUpdate(){ if(tlSel<0)return; const k=TL.keys[tlSel]; k.params={...P}; k.center={x:state.center_x,y:state.center_y}; tlDraw(); setStatus("keyframe updated"); recordHistory(); }
+function tlDel(){ if(tlSel<0)return; TL.keys.splice(tlSel,1); tlSel=-1; tlDraw(); recordHistory(); }
+function tlEditSel(){ if(tlSel<0)return; const k=TL.keys[tlSel]; k.ease=document.getElementById("tlease").value; k.growth=(+document.getElementById("tlgrow").value||100)/100; tlDraw(); }
+function tlSeedCut(){ if(tlSel<0)return; const k=TL.keys[tlSel]; k.seed = k.seed==null ? state.seed : null; tlSyncSelUI(); tlDraw(); }
+function tlSyncSelUI(){
+  const b=document.getElementById("tlseedbtn");
+  if(tlSel<0){ b.textContent="seed cut: –"; return; }
+  const k=TL.keys[tlSel];
+  document.getElementById("tlease").value=k.ease;
+  document.getElementById("tlgrow").value=Math.round((k.growth??1)*100);
+  b.textContent="seed cut: "+(k.seed==null?"off":k.seed);
+}
+function tlSelect(i){ tlSel=i; const k=TL.keys[i]; tlT=k.t; tlApply(k.t); tlSyncSelUI(); tlDraw(); scheduleRender(); }
+function tlDraw(){
+  const bar=document.getElementById("tlbar"); if(!bar) return;
+  const dur=tlDur(), w=bar.clientWidth;
+  bar.querySelectorAll(".kd,.beat").forEach(e=>e.remove());
+  const bpm=+document.getElementById("tlbpm").value||0;
+  if(bpm>0){ const b=60/bpm; for(let t=b;t<dur;t+=b){ const d=document.createElement("div"); d.className="beat"; d.style.left=(t/dur*w)+"px"; bar.appendChild(d); } }
+  TL.keys.forEach((k,i)=>{ const d=document.createElement("div"); d.className="kd"+(i===tlSel?" sel":"")+(k.seed!=null?" cut":"");
+    d.style.left=(k.t/dur*w)+"px";
+    d.addEventListener("mousedown",e=>{ e.stopPropagation(); tlSelect(i);
+      const move=ev=>{ const r=bar.getBoundingClientRect(); k.t=tlSnap((ev.clientX-r.left)/r.width*tlDur()); TL.keys.sort((x,y)=>x.t-y.t); tlSel=TL.keys.indexOf(k); tlT=k.t; tlDraw(); };
+      const up=()=>{ window.removeEventListener("mousemove",move); window.removeEventListener("mouseup",up); tlApply(tlT); scheduleRender(); recordHistory(); };
+      window.addEventListener("mousemove",move); window.addEventListener("mouseup",up); });
+    bar.appendChild(d); });
+  document.getElementById("tlph").style.left=(tlT/dur*w)+"px";
+  document.getElementById("tlinfo").textContent=`${tlT.toFixed(2)}s / ${dur}s · ${TL.keys.length} keys${TL.baseSeed!=null?" · base seed "+TL.baseSeed:""}`;
+}
+
 /* ---------- video ---------- */
 let previewRAF=null, previewStop=false, previewSavedP=null;
 function videoSettings(){                            // seconds × fps -> frames; resolution + aspect -> W×H
@@ -387,6 +454,7 @@ function videoSettings(){                            // seconds × fps -> frames
 }
 function updateVInfo(){ const v=videoSettings(); const el=document.getElementById("vinfo"); if(el) el.textContent=`≈ ${v.frames} frames · ${v.W}×${v.H}px.`; }
 function frameParams(i,frames,mode,randomize){
+  if(mode==="timeline"){ const fps=clampInt("vfps",1,60); return {growth: tlApply(i/fps)}; }
   if(mode==="growth"){ return {growth: frames<2?1:i/(frames-1)}; }
   if(mode==="mutate"){                         // evolve: nudge unlocked params each frame, seed fixed
     for(const [key,label,mn,mx,st] of SLIDERS){
@@ -406,7 +474,7 @@ function frameParams(i,frames,mode,randomize){
 async function previewVideo(){
   stopPreview();
   const {frames,fps}=videoSettings(); const mode=document.getElementById("vmode").value, randomize=document.getElementById("vrand").checked;
-  state._base=state.seed; previewSavedP={...P}; previewStop=false;
+  state._base=state.seed; previewSavedP={...P, _cx:state.center_x, _cy:state.center_y}; previewStop=false;
   let i=0;
   const tick=()=>{
     if(previewStop) return;
@@ -418,7 +486,7 @@ async function previewVideo(){
   };
   tick();
 }
-function stopPreview(){ previewStop=true; if(previewRAF){clearTimeout(previewRAF);previewRAF=null;} if(state._base!=null){state.seed=state._base;document.getElementById("seedval").textContent=state.seed;state._base=null;} if(previewSavedP){Object.assign(P,previewSavedP);SLIDERS.forEach(s=>showVal(s[0]));previewSavedP=null;} }
+function stopPreview(){ previewStop=true; if(previewRAF){clearTimeout(previewRAF);previewRAF=null;} if(state._base!=null){state.seed=state._base;document.getElementById("seedval").textContent=state.seed;state._base=null;} if(previewSavedP){state.center_x=previewSavedP._cx??state.center_x;state.center_y=previewSavedP._cy??state.center_y;delete previewSavedP._cx;delete previewSavedP._cy;Object.assign(P,previewSavedP);SLIDERS.forEach(s=>showVal(s[0]));previewSavedP=null;tlG=1;} }
 async function exportVideo(){
   // Frames are rendered offline and encoded with FIXED timestamps (i/fps), so slow
   // (dense) frames never cause stutter — encoding is decoupled from generation.
@@ -426,9 +494,9 @@ async function exportVideo(){
   const mode=document.getElementById("vmode").value, randomize=document.getElementById("vrand").checked;
   const {frames,fps,W,H}=videoSettings();
   const rc=document.createElement("canvas"); rc.width=W; rc.height=H; const rctx=rc.getContext("2d",{alpha:false});
-  const savedP={...P}, savedSeed=state.seed; state._base=state.seed;
+  const savedP={...P}, savedSeed=state.seed, savedC={x:state.center_x,y:state.center_y}; state._base=state.seed;
   const bitrate=Math.min(40e6, Math.round(W*H*fps*0.18));
-  const restore=()=>{ Object.assign(P,savedP); state.seed=savedSeed; state._base=null; SLIDERS.forEach(s=>showVal(s[0])); document.getElementById("seedval").textContent=state.seed; scheduleRender(); };
+  const restore=()=>{ Object.assign(P,savedP); state.seed=savedSeed; state.center_x=savedC.x; state.center_y=savedC.y; tlG=1; state._base=null; SLIDERS.forEach(s=>showVal(s[0])); document.getElementById("seedval").textContent=state.seed; scheduleRender(); };
   const dl=(blob,ext)=>{ const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`INPUT_OUTPUT_sweep_${stamp()}.${ext}`; a.click(); URL.revokeObjectURL(url); };
 
   // pick a WebCodecs config: prefer H.264/MP4, then VP9/WebM
@@ -572,9 +640,17 @@ function init(){
   document.getElementById("breeze").addEventListener("change",e=>toggleBreeze(e.target.checked));
   document.getElementById("buds").addEventListener("change",e=>{ state.buds=e.target.checked; scheduleRender(); recordHistory(); });
   const asp=document.getElementById("aspect"); asp.addEventListener("change",()=>{ const [w,h]=asp.value.split(",").map(Number); setAspect(w,h); updateVInfo(); recordHistory(); });
-  ["vsecs","vfps","vres"].forEach(id=>document.getElementById(id).addEventListener("input",updateVInfo));
+  ["vsecs","vfps","vres"].forEach(id=>document.getElementById(id).addEventListener("input",()=>{updateVInfo();tlDraw();}));
   updateVInfo();
   fitWrap();
+  // timeline bar: click/drag = scrub
+  const bar=document.getElementById("tlbar");
+  const seekEv=e=>{ const r=bar.getBoundingClientRect(); tlSeek((e.clientX-r.left)/r.width*tlDur()); };
+  bar.addEventListener("mousedown",e=>{ seekEv(e);
+    const mv=ev=>seekEv(ev), up=()=>{window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up);};
+    window.addEventListener("mousemove",mv); window.addEventListener("mouseup",up); });
+  window.addEventListener("resize",()=>tlDraw());
+  tlDraw();
   // style buttons
   const sb=document.getElementById("styles");
   Object.keys(STYLES).forEach(n=>{ const b=document.createElement("button"); b.className="chip"; b.textContent=n; b.onclick=()=>applyStyle(n); sb.appendChild(b); });
@@ -591,4 +667,4 @@ function init(){
 document.addEventListener("DOMContentLoaded",init);
 
 /* expose for inline handlers */
-Object.assign(window,{randomizeParams,mutateParams,rndSeed,resetCenter,resetLimbs,clearCenters,savePresetFile,loadPresetFile,saveSlot,loadSlot,delSlot,exportPNG,previewVideo,stopPreview,exportVideo,undo,redo,openGallery,closeGallery,rerollGallery,toggleGallery,setAspect,openHelp,closeHelp,setEditMode});
+Object.assign(window,{randomizeParams,mutateParams,rndSeed,resetCenter,resetLimbs,clearCenters,savePresetFile,loadPresetFile,saveSlot,loadSlot,delSlot,exportPNG,previewVideo,stopPreview,exportVideo,undo,redo,openGallery,closeGallery,rerollGallery,toggleGallery,setAspect,openHelp,closeHelp,setEditMode,tlAdd,tlUpdate,tlDel,tlEditSel,tlSeedCut,tlDraw});
